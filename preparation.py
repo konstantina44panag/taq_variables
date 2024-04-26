@@ -32,6 +32,11 @@ def handle_time_format(time_col):
         time_col[missing], format="%H:%M:%S", errors="coerce"
     ).dt.time
     return time_col.dt.time
+
+
+def time_to_seconds(t):
+    return (t.hour * 3600 + t.minute * 60 + t.second) + t.microsecond / 1e6
+
     
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
@@ -64,13 +69,25 @@ with tables.open_file(args.hdf5_file_path, 'r') as hdf:
     hdf.close()
 
 # Rename and convert columns
-trades = trades.rename(columns={"TIME_M": "time", "PRICE": "price", "SIZE": "vol"})
-Ask = Ask.rename(columns={"TIME_M": "time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
-Bid = Bid.rename(columns={"TIME_M": "time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
+trades = trades.rename(columns={"TIME_M": "regular_time", "PRICE": "price", "SIZE": "vol"})
+Ask = Ask.rename(columns={"TIME_M": "regular_time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
+Bid = Bid.rename(columns={"TIME_M": "regular_time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
 
-trades["time"] = trades["time"].astype(str).astype(float).astype(np.float64)
-Ask["time"] = Ask["time"].astype(str).astype(float).astype(np.float64)
-Bid["time"] = Bid["time"].astype(str).astype(float).astype(np.float64)
+trades["regular_time"] = trades["regular_time"].astype(str)
+Ask["regular_time"] = Ask["regular_time"].astype(str)
+Bid["regular_time"] = Bid["regular_time"].astype(str)
+
+trades["regular_time"] =  handle_time_format(trades["regular_time"])
+Ask["regular_time"] =  handle_time_format(Ask["regular_time"])
+Bid["regular_time"] =  handle_time_format(Bid["regular_time"])
+
+trades.reset_index(drop=True, inplace=True)
+Ask.reset_index(drop=True, inplace=True)
+Bid.reset_index(drop=True, inplace=True)
+
+trades["time"] = trades["regular_time"].apply(time_to_seconds)
+Ask["time"] = Ask["regular_time"].apply(time_to_seconds)
+Bid["time"] = Bid["regular_time"].apply(time_to_seconds)
 
 trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
 Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
@@ -88,18 +105,12 @@ print(tradessigns)
 
 #More datasets for analysis
 
-Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["time_org", "price", "vol"]].rename(columns={"time_org": "time"})
-Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["time_org", "price", "vol"]].rename(columns={"time_org": "time"})
-tradeswithsign = tradessigns[["time_org", "price", "vol"]].rename(columns={"time_org": "time"})
+trades = trades[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+Ask = Ask[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+Bid = Bid[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"}
 
-
-#Set the time index
-
-trades["time"] = handle_time_format(trades["time"])
-Ask["time"] = handle_time_format(Ask["time"])
-Bid["time"] = handle_time_format(Bid["time"])
-Buys_trades["time"] = handle_time_format(Buys_trades["time"])
-Sells_trades["time"] = handle_time_format(Sells_trades["time"])
-tradeswithsign["time"] = handle_time_format(tradeswithsign["time"])
+Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 
 
