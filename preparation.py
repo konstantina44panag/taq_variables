@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.11
 """This script prepares the datasets to be implemented on algorithms for trade signs and estimation of variables."""
 import pandas as pd
+import datetime
 import argparse
 import numpy as np
 import sys
