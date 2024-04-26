@@ -77,6 +77,8 @@ trades["regular_time"] = trades["regular_time"].astype(str)
 Ask["regular_time"] = Ask["regular_time"].astype(str)
 Bid["regular_time"] = Bid["regular_time"].astype(str)
 
+print(trades)
+
 trades["regular_time"] =  handle_time_format(trades["regular_time"])
 Ask["regular_time"] =  handle_time_format(Ask["regular_time"])
 Bid["regular_time"] =  handle_time_format(Bid["regular_time"])
@@ -113,4 +115,3 @@ Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["regular_time", "price
 Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 
-print(trades)
