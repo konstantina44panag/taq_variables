@@ -50,18 +50,26 @@ def has_16_or_fewer_characters(x):
     return x
 
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
-    """Load specific dataset using PyTables, ensuring that necessary metadata exists."""
+    """Load specific dataset from HDF5 file using h5py, ensuring that necessary metadata exists."""
     try:
-        dataset = hdf_file.get_node(dataset_path)
-        if 'column_names' not in dataset._v_attrs:
+        dataset = hdf_file[dataset_path]
+        if 'column_names' not in dataset.attrs:
             raise KeyError(f"Expected 'column_names' attribute missing in dataset at {dataset_path}")
-        column_names = dataset._v_attrs['column_names']
+        
+        column_names = dataset.attrs['column_names']
         column_names = [name.decode('utf-8') if isinstance(name, bytes) else name for name in column_names]
-        data = {col: dataset.col(col) for col in column_names if col in columns_of_interest}
-        return pd.DataFrame(data)
-    except tables.NoSuchNodeError:
-        raise ValueError(f"Dataset path {dataset_path} not found in HDF5 file.")
 
+        data = {}
+        for col in column_names:
+            if col in columns_of_interest:
+                data[col] = dataset[col][:]
+
+        return pd.DataFrame(data)
+
+    except KeyError as e:
+        raise KeyError(f"Dataset path or attribute error: {e}")
+    except Exception as e:
+        raise Exception(f"An error occurred: {e}")
         
 def apply_column_checks(df, columns):
     """Apply checks and conversions on dataframe columns."""
