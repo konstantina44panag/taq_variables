@@ -26,7 +26,21 @@ parser.add_argument(
 args = parser.parse_args()
 
 # Function definitions
-   
+def convert_float_to_datetime(df, float_column):
+    # Create a datetime object representing midnight
+    midnight = pd.to_datetime('00:00:00')
+    
+    # Convert float values to timedelta
+    df['timedelta'] = pd.to_timedelta(df[float_column], unit='s')
+    
+    # Add timedelta to midnight to get the datetime object
+    df['datetime'] = midnight + df['timedelta']
+    
+    # Drop the intermediate column if not needed
+    df.drop(columns=['timedelta'], inplace=True)
+    
+    return df
+    
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
     try:
@@ -62,10 +76,49 @@ trades = trades.rename(columns={"TIME_M": "regular_time", "PRICE": "price", "SIZ
 Ask = Ask.rename(columns={"TIME_M": "regular_time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
 Bid = Bid.rename(columns={"TIME_M": "regular_time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
 
-trades['regular_time'] = pd.to_datetime(trades['regular_time'].astype(str).str.decode('utf-8'))
-Ask['regular_time'] = pd.to_datetime(Ask['regular_time'].astype(str).str.decode('utf-8'))
-Bid['regular_time'] = pd.to_datetime(Bid['regular_time'].astype(str).str.decode('utf-8'))
+trades["regular_time"] = trades["regular_time"].astype(str).astype(float).astype(np.float64)
+Ask["regular_time"] = Ask["regular_time"].astype(str).astype(float).astype(np.float64)
+Bid["regular_time"] = Bid["regular_time"].astype(str).astype(float).astype(np.float64)
+
 print(trades)
 
+trades["time"] = trades["regular_time"]
+Ask["time"] = Ask["regular_time"]
+Bid["time"] = Bid["regular_time"]
 
+trades = convert_float_to_datetime(trades, 'regular_time')
+Ask = convert_float_to_datetime(Ask, 'regular_time')
+Bid = convert_float_to_datetime(Bid, 'regular_time')
 
+trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
+Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
+Bid["vol"] = Bid["vol"].astype(str).astype(float).astype(np.int64)
+
+trades["price"] = trades["price"].astype(str).astype(float).astype(np.float64)
+Ask["price"] = Ask["price"].astype(str).astype(float).astype(np.float64)
+Bid["price"] = Bid["price"].astype(str).astype(float).astype(np.float64)
+
+# Trade sign estimation
+analyzer = TradeAnalyzer(trades, Ask, Bid)
+tradessigns = analyzer.classify_trades()
+
+print(tradessigns)
+print(trades)
+
+#Datasets for analysis
+trades = trades[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+Ask = Ask[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+Bid = Bid[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+
+print(trades)
+
+Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+
+trades.set_index('time', inplace=True)
+Ask.set_index('time', inplace=True)
+Bid.set_index('time', inplace=True)
+Buys_trades.set_index('time', inplace=True)
+Sells_trades.set_index('time', inplace=True)
+tradeswithsign.set_index('time', inplace=True)
