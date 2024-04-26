@@ -31,7 +31,7 @@ def handle_time_format(time_col):
     time_col[missing] = pd.to_datetime(
         time_col[missing], format="%H:%M:%S", errors="coerce"
     ).dt.time
-    return time_col.dt.tim
+    return time_col.dt.time
     
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
