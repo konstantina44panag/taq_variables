@@ -26,10 +26,21 @@ args = parser.parse_args()
 
 # Function definitions
 def handle_time_format(time_col):
-    time_col = pd.to_datetime(time_col, format="%H:%M:%S.%f", errors="coerce")
-    missing = time_col.isna()
-    time_col[missing] = pd.to_datetime(time_col[missing], format="%H:%M:%S", errors="coerce").dt.time
-    return time_col.dt.time
+    # Print sample data to understand what you're working with
+    print("Sample data before conversion:", time_col.head())
+
+    # Convert using a specified format or try inferring it
+    converted_time = pd.to_datetime(time_col, errors='coerce')
+    if converted_time.isna().all():
+        print("All conversions failed, attempting with another format or handling...")
+        # Attempt another format or a custom handling strategy here
+        # For example:
+        converted_time = pd.to_datetime(time_col, format="%Y-%m-%d %H:%M:%S", errors='coerce')
+
+    # Check results after conversion attempt
+    print("Sample data after conversion:", converted_time.head())
+
+    return converted_time
 
 def time_to_seconds(t):
     return (t.hour * 3600 + t.minute * 60 + t.second) + t.microsecond / 1e6
