@@ -322,3 +322,16 @@ trades_changes.rename(
 
 trades_changes_after_930 = trades_changes.between_time("09:30", "16:00")
 print(trades_changes_after_930)
+
+#Merge first 20 variables into a single dataframe
+merged_df = pd.concat([
+    trades_1min_after_930, asks_1min_after_930, bids_1min_after_930,
+    aggr_buys_1min_after_930, aggr_sells_1min_after_930,
+    vwap_trades_1min_after_930, vwap_buys_1min_after_930, vwap_sells_1min_after_930,
+    average_trades_1min_after_930, average_buys_1min_after_930, average_sells_1min_after_930,
+    one_minute_bins_after_930, one_minute_bins_post_after_930,
+    twap_trades_after_930, twap_asks_after_930, twap_bids_after_930,
+    trades_resampled_after_930, trades_changes_after_930
+], axis=1)
+
+print(merged_df)
