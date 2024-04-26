@@ -35,15 +35,15 @@ from preparation import trades, Buys_trades, Sells_trades, Ask, Bid, tradeswiths
 
 
 # 1,2,3. The last trade/bid/ask price, volume, and timestamp
-trades_1min = trades.resample("1T", on="time").agg(
+trades_1min = trades.resample("1min", on="time").agg(
     {"price": "last", "vol": "last", "time": "last"}
 )
 
-asks_1min = Ask.resample("1T", on="time").agg(
+asks_1min = Ask.resample("1min", on="time").agg(
     {"price": "last", "vol": "last", "time": "last"}
 )
 
-bids_1min = Bid.resample("1T", on="time").agg(
+bids_1min = Bid.resample("1min", on="time").agg(
     {"price": "last", "vol": "last", "time": "last"}
 )
 
@@ -91,9 +91,9 @@ def custom_agg_function(data):
     else:
         return np.nan
 
-aggr_buys_1min = Buys_trades.resample("1T", on="time").apply(custom_agg_function)
+aggr_buys_1min = Buys_trades.resample("1min", on="time").apply(custom_agg_function)
 aggr_buys_1min = aggr_buys_1min.rename("aggressive buyer's price")
-agrr_sells_1min = Sells_trades.resample("1T", on="time").apply(custom_agg_function)
+agrr_sells_1min = Sells_trades.resample("1min", on="time").apply(custom_agg_function)
 agrr_sells_1min = agrr_sells_1min.rename("aggressive seller's price")
 
 print(aggr_buys_1min)
