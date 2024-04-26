@@ -100,6 +100,12 @@ aggr_buys_1min = aggr_buys_1min.rename("aggressive buyer's price")
 agrr_sells_1min = Sells_trades.resample("1min", on="time").apply(custom_agg_function)
 agrr_sells_1min = agrr_sells_1min.rename("aggressive seller's price")
 
+aggr_buys_1min.rename(
+    columns={ "price": "last_buyer_price_4" }, inplace=True,
+)
+agrr_sells_1min.rename(
+    columns={ "price": "last_seller_price_4" }, inplace=True,
+)
 
 aggr_buys_1min_after_930 = aggr_buys_1min.between_time("09:30", "16:00")
 agrr_sells_1min_after_930= agrr_sells_1min.between_time("09:30", "16:00")
@@ -127,6 +133,18 @@ vwap_buys_1min = vwap_buys_1min.rename("volume_weighted_price")
 vwap_sells_1min = Sells_trades.resample("1min", on="time").agg(custom_agg_function)
 vwap_sells_1min = vwap_sells_1min.rename("volume_weighted_price")
 
+
+vwap_trades_1min.rename(
+    columns={ "price": "vwap_trades_5" }, inplace=True,
+)
+vwap_buys_1min.rename(
+    columns={ "price": "vwap_buys_5" }, inplace=True,
+)
+vwap_sells_1min.rename(
+    columns={ "price": "vwap_sells_5" }, inplace=True,
+)
+
+
 vwap_trades_1min_after_930 = vwap_trades_1min.between_time("09:30", "16:00")
 vwap_buys_1min_after_930 = vwap_buys_1min.between_time("09:30", "16:00")
 vwap_sells_1min_after_930 = vwap_sells_1min.between_time("09:30", "16:00")
@@ -140,6 +158,18 @@ print(vwap_sells_1min_after_930)
 average_trades_1min = trades.resample("1min", on="time").agg({"price": "mean"})
 average_buys_1min = Buys_trades.resample("1min", on="time").agg({"price": "mean"})
 average_sells_1min = Sells_trades.resample("1min", on="time").agg({"price": "mean"})
+
+
+average_trades_1min.rename(
+    columns={ "price": "av_price_trades_6" }, inplace=True,
+)
+average_buys_1min.rename(
+    columns={ "price": "av_price_buys_6" }, inplace=True,
+)
+average_sells_1min.rename(
+    columns={ "price": "av_price_sells_6" }, inplace=True,
+)
+
 
 average_trades_1min_after_930 = average_trades_1min.between_time("09:30", "16:00")
 average_buys_1min_after_930 = average_buys_1min.between_time("09:30", "16:00")
@@ -177,6 +207,11 @@ one_minute_bins = merged_trades.resample("1min").agg(aggregation_rules)
 
 one_minute_bins["vwap_bid"] = one_minute_bins["weighted_bid"] / one_minute_bins["vol"]
 one_minute_bins["vwap_ask"] = one_minute_bins["weighted_ask"] / one_minute_bins["vol"]
+one_minute_bins = one_minute_bins[["vwap_bid", "vwap_ask"]]
+
+one_minute_bins.rename(
+    columns={ "vwap_bid": "pre_vwap_bid_7", "vwap_ask": "pre_vwap_ask_7" }, inplace=True,
+)
 
 one_minute_bins_after_930 = one_minute_bins.between_time("09:30", "16:00")
 print(one_minute_bins_after_930)
@@ -213,6 +248,12 @@ one_minute_bins_post["vwap_bid"] = (
 one_minute_bins_post["vwap_ask"] = (
     one_minute_bins_post["weighted_ask"] / one_minute_bins_post["vol"]
 )
+one_minute_bins_post = one_minute_bins_post[["vwap_bid", "vwap_ask"]]
+
+one_minute_bins_post.rename(
+    columns={ "vwap_bid": "post_vwap_bid_7", "vwap_ask": "post_vwap_ask_7" }, inplace=True,
+)
+
 one_minute_bins_post_after_930 = one_minute_bins_post.between_time("09:30", "16:00")
 print(one_minute_bins_post_after_930)
 
@@ -239,9 +280,20 @@ twap_trades = trades.resample("1min").apply(calculate_twap_and_volume)
 twap_asks = Ask.resample("1min").apply(calculate_twap_and_volume)
 twap_bids = Bid.resample("1min").apply(calculate_twap_and_volume)
 
+twap_trades.rename(
+    columns={ "TWAP": "TWAP_trades_8" , "TWAV": "TWAV_trades_8"}, inplace=True,
+)
+twap_asks.rename(
+    columns={ "TWAP": "TWAP_asks_8" , "TWAV": "TWAV_asks_8"}, inplace=True,
+)
+twap_bids.rename(
+    columns={ "TWAP": "TWAP_bids_8" , "TWAV": "TWAV_bids_8"}, inplace=True,
+)
+
 twap_trades_after_930 = twap_trades.between_time("09:30", "16:00")
 twap_asks_after_930 = twap_asks.between_time("09:30", "16:00")
 twap_bids_after_930 = twap_bids.between_time("09:30", "16:00")
+
 
 print(twap_trades_after_930)
 print(twap_asks_after_930)
@@ -263,6 +315,9 @@ Sells_trades_resampled = Sells_trades.resample("1min", on="time").agg({"vol": "s
 Ask_resampled = Ask.resample("1min", on="time").agg({"vol": "sum"})
 Bid_resampled = Bid.resample("1min", on="time").agg({"vol": "sum"})
 
+trades_resampled.rename(
+    columns={ "vol": "tvol_trades_9"}, inplace=True,
+)
 trades_resampled_after_930 = trades_resampled.between_time("09:30", "16:00")
 print(trades_resampled_after_930)
 
@@ -282,5 +337,9 @@ Ask_changes = Ask.resample("1min", on="time").apply(
 Bid_changes = Bid.resample("1min", on="time").apply(
     {"price": count_changes, "vol": count_changes}
 )
+trades_changes.rename(
+    columns={ "price": "no_dp_trades_10", "vol" : "no_dv_trades_10"}, inplace=True,
+)
+
 trades_changes_after_930 = trades_changes.between_time("09:30", "16:00")
 print(trades_changes_after_930)
