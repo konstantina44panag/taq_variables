@@ -110,10 +110,6 @@ tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(
 )
 
 
-Buys_trades["time"] = handle_time_format(Buys_trades["time"])
-Sells_trades["time"] = handle_time_format(Sells_trades["time"])
-tradeswithsign["time"] = handle_time_format(tradeswithsign["time"])
-
 #Set the time index
 trades.set_index('time', inplace=True)
 Ask.set_index('time', inplace=True)
