@@ -80,7 +80,6 @@ trades["regular_time"] = trades["regular_time"].astype(str).astype(float).astype
 Ask["regular_time"] = Ask["regular_time"].astype(str).astype(float).astype(np.float64)
 Bid["regular_time"] = Bid["regular_time"].astype(str).astype(float).astype(np.float64)
 
-print(trades)
 
 trades["time"] = trades["regular_time"]
 Ask["time"] = Ask["regular_time"]
@@ -101,9 +100,6 @@ Bid["price"] = Bid["price"].astype(str).astype(float).astype(np.float64)
 # Trade sign estimation
 analyzer = TradeAnalyzer(trades, Ask, Bid)
 tradessigns = analyzer.classify_trades()
-
-print(tradessigns)
-print(trades)
 
 #Datasets for analysis
 trades = trades[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
