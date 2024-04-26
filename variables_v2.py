@@ -33,13 +33,6 @@ subprocess.run([
 
 from preparation import trades, Buys_trades, Sells_trades, Ask, Bid, tradeswithsign
 
-trades.set_index('time', inplace=True)
-Ask.set_index('time', inplace=True)
-Bid.set_index('time', inplace=True)
-Buys_trades.set_index('time', inplace=True)
-Sells_trades.set_index('time', inplace=True)
-tradeswithsign.set_index('time', inplace=True)
-
 
 # 1,2,3. The last trade/bid/ask price, volume, and timestamp
 trades_1min = trades.resample("1min", on="time").agg(
