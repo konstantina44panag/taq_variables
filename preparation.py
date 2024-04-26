@@ -5,6 +5,7 @@ import h5py
 import argparse
 import numpy as np
 import sys
+import tables
 from sign_algorithms import TradeAnalyzer
 
 # Set up argparse to parse command line arguments
@@ -49,17 +50,18 @@ def has_16_or_fewer_characters(x):
     return x
 
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
-    """Load specific dataset from HDF5 file, ensuring that necessary metadata exists."""
-    if dataset_path in hdf_file:
-        dataset = hdf_file[dataset_path]
-        if 'column_names' not in dataset.attrs:
+    """Load specific dataset using PyTables, ensuring that necessary metadata exists."""
+    try:
+        dataset = hdf_file.get_node(dataset_path)
+        if 'column_names' not in dataset._v_attrs:
             raise KeyError(f"Expected 'column_names' attribute missing in dataset at {dataset_path}")
-        column_names = dataset.attrs['column_names']
+        column_names = dataset._v_attrs['column_names']
         column_names = [name.decode('utf-8') if isinstance(name, bytes) else name for name in column_names]
-        data = {col: dataset[col][:] for col in column_names if col in columns_of_interest}
+        data = {col: dataset.col(col) for col in column_names if col in columns_of_interest}
         return pd.DataFrame(data)
-    else:
+    except tables.NoSuchNodeError:
         raise ValueError(f"Dataset path {dataset_path} not found in HDF5 file.")
+
         
 def apply_column_checks(df, columns):
     """Apply checks and conversions on dataframe columns."""
@@ -73,7 +75,7 @@ pd.set_option("display.max_rows", 500)
 
 # Load datasets
 columns_of_interest = ["TIME_M", "PRICE", "SIZE"]
-with h5py.File(args.hdf5_file_path, "r") as hdf:
+with tables.open_file(args.hdf5_file_path, 'r') as hdf:
     trades = load_dataset(hdf, args.ctm_dataset_path, columns_of_interest)
     trades = apply_column_checks(trades, ["PRICE", "SIZE"])
 
