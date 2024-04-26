@@ -1,7 +1,6 @@
 #!/usr/bin/env python3.11
 """This script prepares the datasets to be implemented on algorithms for trade signs and estimation of variables."""
 import pandas as pd
-import h5py
 import argparse
 import numpy as np
 import sys
@@ -50,24 +49,25 @@ def has_16_or_fewer_characters(x):
     return x
 
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
-    """Load specific dataset from HDF5 file using h5py, ensuring that necessary metadata exists."""
+    """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
     try:
-        dataset = hdf_file[dataset_path]
-        if 'column_names' not in dataset.attrs:
+        dataset = hdf_file.get_node(dataset_path)
+        
+        if 'column_names' not in dataset._v_attrs:
             raise KeyError(f"Expected 'column_names' attribute missing in dataset at {dataset_path}")
         
-        column_names = dataset.attrs['column_names']
+        column_names = dataset._v_attrs['column_names']
         column_names = [name.decode('utf-8') if isinstance(name, bytes) else name for name in column_names]
 
         data = {}
         for col in column_names:
             if col in columns_of_interest:
-                data[col] = dataset[col][:]
+                data[col] = dataset.col(col)  # Use .col() method in PyTables to access column data
 
         return pd.DataFrame(data)
 
-    except KeyError as e:
-        raise KeyError(f"Dataset path or attribute error: {e}")
+    except tables.NoSuchNodeError as e:
+        raise Exception(f"Dataset path error: {e}")
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
         
@@ -82,18 +82,15 @@ def apply_column_checks(df, columns):
 pd.set_option("display.max_rows", 500)
 
 # Load datasets
-columns_of_interest = ["TIME_M", "PRICE", "SIZE"]
 with tables.open_file(args.hdf5_file_path, 'r') as hdf:
-    trades = load_dataset(hdf, args.ctm_dataset_path, columns_of_interest)
-    trades = apply_column_checks(trades, ["PRICE", "SIZE"])
+    trades = load_dataset(hdf, args.ctm_dataset_path, ["TIME_M", "PRICE", "SIZE"])
+    Ask = load_dataset(hdf, args.complete_nbbo_dataset_path, ["TIME_M", "BEST_ASK", "Best_AskSizeShares"])
+    Bid = load_dataset(hdf, args.complete_nbbo_dataset_path, ["TIME_M", "BEST_BID", "Best_BidSizeShares"])
+    hdf.close()
 
-    columns_of_interest = ["TIME_M", "BEST_ASK", "Best_AskSizeShares"]
-    Ask = load_dataset(hdf, args.complete_nbbo_dataset_path, columns_of_interest)
-    Ask = apply_column_checks(Ask, ["BEST_ASK", "Best_AskSizeShares"])
-
-    columns_of_interest = ["TIME_M", "BEST_BID", "Best_BidSizeShares"]
-    Bid = load_dataset(hdf, args.complete_nbbo_dataset_path, columns_of_interest)
-    Bid = apply_column_checks(Bid, ["BEST_BID", "Best_BidSizeShares"])
+trades = apply_column_checks(trades, ["PRICE", "SIZE"])
+Ask = apply_column_checks(Ask, ["BEST_ASK", "Best_AskSizeShares"])
+Bid = apply_column_checks(Bid, ["BEST_BID", "Best_BidSizeShares"])
 
 # Rename and convert columns
 trades = trades.rename(columns={"TIME_M": "regular_time", "PRICE": "price", "SIZE": "vol"})
