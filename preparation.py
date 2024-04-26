@@ -84,9 +84,9 @@ trades["time"] = trades["regular_time"]
 Ask["time"] = Ask["regular_time"]
 Bid["time"] = Bid["regular_time"]
 
-trades = convert_float_to_datetime(trades, 'regular_time')
-Ask = convert_float_to_datetime(Ask, 'regular_time')
-Bid = convert_float_to_datetime(Bid, 'regular_time')
+trades = convert_float_to_datetime(trades, 'regular_time', args.base_date)
+Ask = convert_float_to_datetime(Ask, 'regular_time', args.base_date)
+Bid = convert_float_to_datetime(Bid, 'regular_time', args.base_date)
 
 trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
 Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
