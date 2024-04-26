@@ -112,9 +112,3 @@ Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["datetime", "price", "
 Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
 tradeswithsign = tradessigns[["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
 
-trades.set_index('time', inplace=True)
-Ask.set_index('time', inplace=True)
-Bid.set_index('time', inplace=True)
-Buys_trades.set_index('time', inplace=True)
-Sells_trades.set_index('time', inplace=True)
-tradeswithsign.set_index('time', inplace=True)
