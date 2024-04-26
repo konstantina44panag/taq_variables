@@ -316,14 +316,25 @@ Ask_changes = Ask.resample("1min", on="time").apply(
 Bid_changes = Bid.resample("1min", on="time").apply(
     {"price": count_changes, "vol": count_changes}
 )
+
 trades_changes.rename(
     columns={ "price": "no_dp_trades_10", "vol" : "no_dv_trades_10"}, inplace=True,
 )
-
+Ask_changes.rename(
+    columns={ "price": "no_dp_asks_10", "vol" : "no_dv_asks_10"}, inplace=True,
+)
+Bid_changes.rename(
+    columns={ "price": "no_dp_bids_10", "vol" : "no_dv_bids_10"}, inplace=True,
+)
 trades_changes_after_930 = trades_changes.between_time("09:30", "16:00")
-print(trades_changes_after_930)
+Ask_changes_after_930 = Ask_changes.between_time("09:30", "16:00")
+Bid_changes_after_930 = Bid_changes.between_time("09:30", "16:00")
 
-#Merge first 20 variables into a single dataframe
+print(trades_changes_after_930)
+print(Ask_changes_after_930)
+print(Bid_changes_after_930)
+
+#Merge first 10 variables into a single dataframe
 merged_df = pd.concat([
     trades_1min_after_930, asks_1min_after_930, bids_1min_after_930,
     aggr_buys_1min_after_930, aggr_sells_1min_after_930,
@@ -331,7 +342,8 @@ merged_df = pd.concat([
     average_trades_1min_after_930, average_buys_1min_after_930, average_sells_1min_after_930,
     one_minute_bins_after_930, one_minute_bins_post_after_930,
     twap_trades_after_930, twap_asks_after_930, twap_bids_after_930,
-    trades_resampled_after_930, trades_changes_after_930
+    trades_resampled_after_930, trades_changes_after_930, Ask_changes_after_930, Bid_changes_after_930
 ], axis=1)
 
 print(merged_df)
+merged_df.to_csv("merged_data.csv", index=True)
