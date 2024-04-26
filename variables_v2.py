@@ -164,7 +164,10 @@ def calculate_twap_and_volume(group):
     twav = time_weighted_volumes.sum() / total_time if total_time != 0 else 0
 
     return pd.Series({"TWAP": twap, "TWAV": twav})
-
+    
+trades.set_index("time", inplace=True)
+Ask.set_index("time", inplace=True)
+Bid.set_index("time", inplace=True)
 twap_trades = trades.resample("1min").apply(calculate_twap_and_volume)
 twap_asks = Ask.resample("1min").apply(calculate_twap_and_volume)
 twap_bids = Bid.resample("1min").apply(calculate_twap_and_volume)
