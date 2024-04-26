@@ -346,4 +346,4 @@ merged_df = pd.concat([
 ], axis=1)
 
 print(merged_df)
-merged_df.to_csv("merged_data.csv", index=True)
+merged_df.to_csv("IBM_20090302_variables.csv", index=True)
