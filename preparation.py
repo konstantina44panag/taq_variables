@@ -26,21 +26,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 # Function definitions
-def float_to_time(float_time):
-    hours = int(float_time // 3600)
-    minutes = int((float_time % 3600) // 60)
-    seconds = int(float_time % 60)
-    microseconds = int((float_time % 1) * 1e6)  # Microseconds
-    nanoseconds = int(round((float_time % 1) * 1e9)) % 1000  # Nanoseconds
-
-    time_obj = datetime.time(hours, minutes, seconds, microseconds)
-
-    time_str = time_obj.strftime("%H:%M:%S.%f")
-
-    time_str += f"{nanoseconds:03d}"  # Format nanoseconds to 3 digits
-
-    return time_str
-    
+   
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
     try:
@@ -86,13 +72,9 @@ trades["time"] = trades["regular_time"]
 Ask["time"] = Ask["regular_time"]
 Bid["time"] = Bid["regular_time"]
 
-trades["regular_time"] = trades["regular_time"].apply(float_to_time)
-Ask["regular_time"] = Ask["regular_time"].apply(float_to_time)
-Bid["regular_time"] = Bid["regular_time"].apply(float_to_time)
-
-trades.reset_index(drop=True, inplace=True)
-Ask.reset_index(drop=True, inplace=True)
-Bid.reset_index(drop=True, inplace=True)
+trades["regular_time"] = pd.to_datetime(trades['regular_time'], unit='ns') 
+Ask["regular_time"] = pd.to_datetime(Ask['regular_time'], unit='ns')
+Bid["regular_time"] = pd.to_datetime(Bid['regular_time'], unit='ns')
 
 trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
 Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
@@ -116,4 +98,12 @@ Bid = Bid[["regular_time", "price", "vol"]].rename(columns={"regular_time": "tim
 Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+
+trades.set_index('time', inplace=True)
+Ask.set_index('time', inplace=True)
+Bid.set_index('time', inplace=True)
+Buys_trades.set_index('time', inplace=True)
+Sells_trades.set_index('time', inplace=True)
+tradeswithsign.set_index('time', inplace=True)
+
 
