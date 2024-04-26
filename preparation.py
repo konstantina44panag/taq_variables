@@ -26,9 +26,13 @@ args = parser.parse_args()
 
 # Function definitions
 def handle_time_format(time_col):
-    time_col = time_col.str.decode('utf-8').astype(float).astype(np.float64)
-    return time_col
-
+    time_col = pd.to_datetime(time_col, format="%H:%M:%S.%f", errors="coerce")
+    missing = time_col.isna()
+    time_col[missing] = pd.to_datetime(
+        time_col[missing], format="%H:%M:%S", errors="coerce"
+    ).dt.time
+    return time_col.dt.tim
+    
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
     try:
@@ -64,13 +68,9 @@ trades = trades.rename(columns={"TIME_M": "time", "PRICE": "price", "SIZE": "vol
 Ask = Ask.rename(columns={"TIME_M": "time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
 Bid = Bid.rename(columns={"TIME_M": "time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
 
-trades["time"] = handle_time_format(trades["time"])
-Ask["time"] = handle_time_format(Ask["time"])
-Bid["time"] = handle_time_format(Bid["time"])
-
-trades.reset_index(drop=True, inplace=True)
-Ask.reset_index(drop=True, inplace=True)
-Bid.reset_index(drop=True, inplace=True)
+trades["time"] = trades["time"].astype(str).astype(float).astype(np.int64)
+Ask["time"] = Ask["time"].astype(str).astype(float).astype(np.int64)
+Bid["time"] = Bid["time"].astype(str).astype(float).astype(np.int64)
 
 trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
 Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
@@ -103,6 +103,15 @@ tradeswithsign = tradeswithsign.dropna(subset=["time", "price", "vol"])
 
 
 #Set the time index
+
+trades["time"] = handle_time_format(trades["time"])
+Ask["time"] = handle_time_format(Ask["time"])
+Bid["time"] = handle_time_format(Bid["time"])
+Buys_trades["time"] = handle_time_format(Buys_trades["time"])
+Sells_trades["time"] = handle_time_format(Sells_trades["time"])
+tradeswithsign["time"] = handle_time_format(tradeswithsign["time"])
+
+
 trades.set_index('time', inplace=True)
 Ask.set_index('time', inplace=True)
 Bid.set_index('time', inplace=True)
