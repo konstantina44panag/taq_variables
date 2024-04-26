@@ -28,8 +28,8 @@ args = parser.parse_args()
 def handle_time_format(time_col):
     time_col = pd.to_datetime(time_col, format="%H:%M:%S.%f", errors="coerce")
     missing = time_col.isna()
-    time_col[missing] = pd.to_datetime(
-        time_col[missing], format="%H:%M:%S", errors="coerce"
+    time_col.loc[missing] = pd.to_datetime(
+        time_col.loc[missing].astype(str), format="%H:%M:%S", errors="coerce"
     ).dt.time
     return time_col.dt.time
 
