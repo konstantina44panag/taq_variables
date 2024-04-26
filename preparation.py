@@ -34,20 +34,6 @@ def handle_time_format(time_col):
 def time_to_seconds(t):
     return (t.hour * 3600 + t.minute * 60 + t.second) + t.microsecond / 1e6
 
-def has_16_or_fewer_characters(x):
-    """
-    Check if the string has 16 or fewer characters and handle appropriately.
-    If more than 16 characters are found, truncate to 16 characters and log a message.
-    """
-    try:
-        str_x = str(x)  
-        if len(str_x) > 16:
-            sys.stderr.write(f"Warning: Value longer than 16 digits detected; truncated to 16 digits: {str_x[:16]}\n")
-            return str_x[:16] 
-    except Exception as e:
-        sys.stderr.write(f"Error processing the value {x}: {e}\n")
-    return x
-
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
     try:
@@ -68,13 +54,6 @@ def load_dataset(hdf_file, dataset_path, columns_of_interest):
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
         
-def apply_column_checks(df, columns):
-    """Apply checks and conversions on dataframe columns."""
-    for column in columns:
-        if df[column].dtype == 'O':  # Assuming 'O' type means it's a string
-            df[column] = df[column].apply(has_16_or_fewer_characters)
-    return df
-
 # Main script execution
 pd.set_option("display.max_rows", 500)
 
@@ -84,10 +63,6 @@ with tables.open_file(args.hdf5_file_path, 'r') as hdf:
     Ask = load_dataset(hdf, args.complete_nbbo_dataset_path, ["TIME_M", "BEST_ASK", "Best_AskSizeShares"])
     Bid = load_dataset(hdf, args.complete_nbbo_dataset_path, ["TIME_M", "BEST_BID", "Best_BidSizeShares"])
     hdf.close()
-
-trades = apply_column_checks(trades, ["PRICE", "SIZE"])
-Ask = apply_column_checks(Ask, ["BEST_ASK", "Best_AskSizeShares"])
-Bid = apply_column_checks(Bid, ["BEST_BID", "Best_BidSizeShares"])
 
 # Rename and convert columns
 trades = trades.rename(columns={"TIME_M": "regular_time", "PRICE": "price", "SIZE": "vol"})
@@ -107,13 +82,13 @@ trades["time"] = trades["regular_time"].apply(time_to_seconds)
 Ask["time"] = Ask["regular_time"].apply(time_to_seconds)
 Bid["time"] = Bid["regular_time"].apply(time_to_seconds)
 
-trades["vol"] = trades["vol"].astype(np.int64)
-Ask["vol"] = Ask["vol"].astype(np.int64)
-Bid["vol"] = Bid["vol"].astype(np.int64)
+trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
+Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
+Bid["vol"] = Bid["vol"].astype(str).astype(float).astype(np.int64)
 
-trades["price"] = trades["price"].astype(np.float64)
-Ask["price"] = Ask["price"].astype(np.float64)
-Bid["price"] = Bid["price"].astype(np.float64)
+trades["price"] = trades["price"].astype(str).astype(float).astype(np.float64)
+Ask["price"] = Ask["price"].astype(str).astype(float).astype(np.float64)
+Bid["price"] = Bid["price"].astype(str).astype(float).astype(np.float64)
 
 # Trade sign estimation
 analyzer = TradeAnalyzer(trades, Ask, Bid)
