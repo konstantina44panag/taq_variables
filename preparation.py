@@ -55,11 +55,12 @@ def load_dataset(hdf_file, dataset_path, columns_of_interest):
         if 'column_names' not in dataset.attrs:
             raise KeyError(f"Expected 'column_names' attribute missing in dataset at {dataset_path}")
         column_names = dataset.attrs['column_names']
-        data = {col: dataset[col][:] for col in columns_of_interest if col in column_names}
+        column_names = [name.decode('utf-8') if isinstance(name, bytes) else name for name in column_names]
+        data = {col: dataset[col][:] for col in column_names if col in columns_of_interest}
         return pd.DataFrame(data)
     else:
         raise ValueError(f"Dataset path {dataset_path} not found in HDF5 file.")
-
+        
 def apply_column_checks(df, columns):
     """Apply checks and conversions on dataframe columns."""
     for column in columns:
