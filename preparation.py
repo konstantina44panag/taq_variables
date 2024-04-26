@@ -85,9 +85,9 @@ trades["time"] = trades["regular_time"]
 Ask["time"] = Ask["regular_time"]
 Bid["time"] = Bid["regular_time"]
 
-trades["regular_time"] =  float_to_time(trades["regular_time"])
-Ask["regular_time"] =  float_to_time(Ask["regular_time"])
-Bid["regular_time"] =  float_to_time(Bid["regular_time"])
+trades["regular_time"] = trades["regular_time"].apply(float_to_time)
+Ask["regular_time"] = Ask["regular_time"].apply(float_to_time)
+Bid["regular_time"] = Bid["regular_time"].apply(float_to_time)
 
 trades.reset_index(drop=True, inplace=True)
 Ask.reset_index(drop=True, inplace=True)
