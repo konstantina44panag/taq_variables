@@ -23,20 +23,19 @@ parser.add_argument(
     type=str,
     help="The dataset path within the HDF5 file for complete nbbo data."
 )
+parser.add_argument("base_date", type=str, help="The base date in YYYY-MM-DD format for time conversions.")
+
 args = parser.parse_args()
 
 # Function definitions
-def convert_float_to_datetime(df, float_column):
-    # Create a datetime object representing midnight
-    midnight = pd.to_datetime('2009-03-02 00:00:00')
+def convert_float_to_datetime(df, float_column, base_date):
+    """Converts float time values to datetime objects based on a base date."""
+    midnight = pd.to_datetime(base_date + ' 00:00:00')
     
-    # Convert float values to timedelta
     df['timedelta'] = pd.to_timedelta(df[float_column], unit='s')
     
-    # Add timedelta to midnight to get the datetime object
     df['datetime'] = midnight + df['timedelta']
     
-    # Drop the intermediate column if not needed
     df.drop(columns=['timedelta'], inplace=True)
     
     return df
