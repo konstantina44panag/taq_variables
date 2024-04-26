@@ -106,7 +106,6 @@ trades = trades[["datetime", "price", "vol"]].rename(columns={"datetime": "time"
 Ask = Ask[["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
 Bid = Bid[["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
 
-print(trades)
 
 Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
 Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
