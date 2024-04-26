@@ -25,17 +25,20 @@ parser.add_argument(
 args = parser.parse_args()
 
 # Function definitions
-def handle_time_format(time_col):
-    time_col = pd.to_datetime(time_col, format="%H:%M:%S.%f", errors="coerce")
-    missing = time_col.isna()
-    time_col.loc[missing] = pd.to_datetime(
-        time_col.loc[missing].astype(str), format="%H:%M:%S", errors="coerce"
-    ).dt.time
-    return time_col.dt.time
+def float_to_time(float_time):
+    hours = int(float_time // 3600)
+    minutes = int((float_time % 3600) // 60)
+    seconds = int(float_time % 60)
+    microseconds = int((float_time % 1) * 1e6)  # Microseconds
+    nanoseconds = int(round((float_time % 1) * 1e9)) % 1000  # Nanoseconds
 
-def time_to_seconds(t):
-    return (t.hour * 3600 + t.minute * 60 + t.second) + t.microsecond / 1e6
+    time_obj = datetime.time(hours, minutes, seconds, microseconds)
 
+    time_str = time_obj.strftime("%H:%M:%S.%f")
+
+    time_str += f"{nanoseconds:03d}"  # Format nanoseconds to 3 digits
+
+    return time_str
     
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
@@ -82,9 +85,9 @@ trades["time"] = trades["regular_time"]
 Ask["time"] = Ask["regular_time"]
 Bid["time"] = Bid["regular_time"]
 
-trades["regular_time"] =  handle_time_format(trades["regular_time"])
-Ask["regular_time"] =  handle_time_format(Ask["regular_time"])
-Bid["regular_time"] =  handle_time_format(Bid["regular_time"])
+trades["regular_time"] =  float_to_time(trades["regular_time"])
+Ask["regular_time"] =  float_to_time(Ask["regular_time"])
+Bid["regular_time"] =  float_to_time(Bid["regular_time"])
 
 trades.reset_index(drop=True, inplace=True)
 Ask.reset_index(drop=True, inplace=True)
