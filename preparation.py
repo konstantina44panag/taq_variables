@@ -28,7 +28,7 @@ args = parser.parse_args()
 # Function definitions
 def convert_float_to_datetime(df, float_column):
     # Create a datetime object representing midnight
-    midnight = pd.to_datetime('00:00:00')
+    midnight = pd.to_datetime('2009-03-02 00:00:00')
     
     # Convert float values to timedelta
     df['timedelta'] = pd.to_timedelta(df[float_column], unit='s')
