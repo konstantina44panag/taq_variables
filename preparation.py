@@ -62,10 +62,9 @@ trades = trades.rename(columns={"TIME_M": "regular_time", "PRICE": "price", "SIZ
 Ask = Ask.rename(columns={"TIME_M": "regular_time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
 Bid = Bid.rename(columns={"TIME_M": "regular_time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
 
-trades['regular_time'] = pd.to_datetime(trades['regular_time'].str.decode('utf-8'))
-Ask['regular_time'] = pd.to_datetime(Ask['regular_time'].str.decode('utf-8'))
-Bid['regular_time'] = pd.to_datetime(Bid['regular_time'].str.decode('utf-8'))
-
+trades['regular_time'] = pd.to_datetime(trades['regular_time'].astype(str).str.decode('utf-8'))
+Ask['regular_time'] = pd.to_datetime(Ask['regular_time'].astype(str).str.decode('utf-8'))
+Bid['regular_time'] = pd.to_datetime(Bid['regular_time'].astype(str).str.decode('utf-8'))
 print(trades)
 
 
