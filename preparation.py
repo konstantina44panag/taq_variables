@@ -116,6 +116,11 @@ Buys_trades["time"] = handle_time_format(Buys_trades["time"])
 Sells_trades["time"] = handle_time_format(Sells_trades["time"])
 tradeswithsign["time"] = handle_time_format(tradeswithsign["time"])
 
+#Set the time index
+trades.set_index('time', inplace=True)
+Ask.set_index('time', inplace=True)
+Bid.set_index('time', inplace=True)
+
 #Data cleaning
 trades = trades.dropna(subset=["time", "price", "vol"])
 Buys_trades = Buys_trades.dropna(subset=["time", "price", "vol"])
