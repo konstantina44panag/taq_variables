@@ -68,9 +68,9 @@ trades = trades.rename(columns={"TIME_M": "time", "PRICE": "price", "SIZE": "vol
 Ask = Ask.rename(columns={"TIME_M": "time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
 Bid = Bid.rename(columns={"TIME_M": "time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
 
-trades["time"] = trades["time"].astype(str).astype(float).astype(np.int64)
-Ask["time"] = Ask["time"].astype(str).astype(float).astype(np.int64)
-Bid["time"] = Bid["time"].astype(str).astype(float).astype(np.int64)
+trades["time"] = trades["time"].astype(str).astype(float).astype(np.float64)
+Ask["time"] = Ask["time"].astype(str).astype(float).astype(np.float64)
+Bid["time"] = Bid["time"].astype(str).astype(float).astype(np.float64)
 
 trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
 Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
@@ -92,15 +92,6 @@ Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["time", "price", "vol"
 Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["time", "price", "vol"]]
 tradeswithsign = tradessigns[["time", "price", "vol"]]
 
-#Data cleaning
-trades = trades.dropna(subset=["time", "price", "vol"])
-Buys_trades = Buys_trades.dropna(subset=["time", "price", "vol"])
-Sells_trades = Sells_trades.dropna(subset=["time", "price", "vol"])
-Ask = Ask.dropna(subset=["time", "price", "vol"])
-Bid = Bid.dropna(subset=["time", "price", "vol"])
-tradeswithsign = tradeswithsign.dropna(subset=["time", "price", "vol"])
-
-
 
 #Set the time index
 
@@ -111,8 +102,4 @@ Buys_trades["time"] = handle_time_format(Buys_trades["time"])
 Sells_trades["time"] = handle_time_format(Sells_trades["time"])
 tradeswithsign["time"] = handle_time_format(tradeswithsign["time"])
 
-
-trades.set_index('time', inplace=True)
-Ask.set_index('time', inplace=True)
-Bid.set_index('time', inplace=True)
 
