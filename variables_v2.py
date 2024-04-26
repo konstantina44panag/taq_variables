@@ -173,7 +173,7 @@ aggregation_rules = {
     "price_ask": "mean",
 }
 
-one_minute_bins = merged_trades.resample("1T").agg(aggregation_rules)
+one_minute_bins = merged_trades.resample("1min").agg(aggregation_rules)
 
 one_minute_bins["vwap_bid"] = one_minute_bins["weighted_bid"] / one_minute_bins["vol"]
 one_minute_bins["vwap_ask"] = one_minute_bins["weighted_ask"] / one_minute_bins["vol"]
@@ -204,7 +204,7 @@ aggregation_rules = {
     "price_ask": "mean",
 }
 
-one_minute_bins_post = post_merged_trades.resample("1T", on="time").agg(
+one_minute_bins_post = post_merged_trades.resample("1min", on="time").agg(
     aggregation_rules
 )
 one_minute_bins_post["vwap_bid"] = (
@@ -257,11 +257,11 @@ if Ask.index.name == "time":
 if Bid.index.name == "time":
     Bid.reset_index(inplace=True)
 
-trades_resampled = trades.resample("1T", on="time").agg({"vol": "sum"})
-Buys_trades_resampled = Buys_trades.resample("1T", on="time").agg({"vol": "sum"})
-Sells_trades_resampled = Sells_trades.resample("1T", on="time").agg({"vol": "sum"})
-Ask_resampled = Ask.resample("1T", on="time").agg({"vol": "sum"})
-Bid_resampled = Bid.resample("1T", on="time").agg({"vol": "sum"})
+trades_resampled = trades.resample("1min", on="time").agg({"vol": "sum"})
+Buys_trades_resampled = Buys_trades.resample("1min", on="time").agg({"vol": "sum"})
+Sells_trades_resampled = Sells_trades.resample("1min", on="time").agg({"vol": "sum"})
+Ask_resampled = Ask.resample("1min", on="time").agg({"vol": "sum"})
+Bid_resampled = Bid.resample("1min", on="time").agg({"vol": "sum"})
 
 trades_resampled_after_930 = trades_resampled.between_time("09:30", "16:00")
 print(trades_resampled_after_930)
@@ -273,13 +273,13 @@ def count_changes(series):
     return num_changes
 
 
-trades_changes = trades.resample("1T", on="time").apply(
+trades_changes = trades.resample("1min", on="time").apply(
     {"price": count_changes, "vol": count_changes}
 )
-Ask_changes = Ask.resample("1T", on="time").apply(
+Ask_changes = Ask.resample("1min", on="time").apply(
     {"price": count_changes, "vol": count_changes}
 )
-Bid_changes = Bid.resample("1T", on="time").apply(
+Bid_changes = Bid.resample("1min", on="time").apply(
     {"price": count_changes, "vol": count_changes}
 )
 trades_changes_after_930 = trades_changes.between_time("09:30", "16:00")
