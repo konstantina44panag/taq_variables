@@ -53,21 +53,18 @@ def load_dataset(hdf_file, dataset_path, columns_of_interest):
     try:
         dataset = hdf_file.get_node(dataset_path)
         
-        if 'column_names' not in dataset._v_attrs:
-            raise KeyError(f"Expected 'column_names' attribute missing in dataset at {dataset_path}")
-        
-        column_names = dataset._v_attrs['column_names']
-        column_names = [name.decode('utf-8') if isinstance(name, bytes) else name for name in column_names]
+        column_names = [dataset._v_attrs[attr_name] for attr_name in dataset._v_attrs._f_list() if '_kind' in attr_name]
+        column_names = [item for sublist in column_names for item in sublist]  # Flatten list if needed
 
         data = {}
         for col in column_names:
             if col in columns_of_interest:
-                data[col] = dataset.col(col)  # Use .col() method in PyTables to access column data
+                data[col] = dataset.col(col)
 
         return pd.DataFrame(data)
 
     except tables.NoSuchNodeError as e:
-        raise Exception(f"Dataset path error: {e}")
+        raise ValueError(f"Dataset path not found: {dataset_path}")
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
         
