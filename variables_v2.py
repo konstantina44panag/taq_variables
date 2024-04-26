@@ -105,7 +105,7 @@ aggr_buys_1min_after_930 = aggr_buys_1min.between_time("09:30", "16:00")
 agrr_sells_1min_after_930= agrr_sells_1min.between_time("09:30", "16:00")
 
 print(aggr_buys_1min_after_930)
-print(agrr_sells_1min _after_930)
+print(agrr_sells_1min_after_930)
 
 # 5.VWAP of trades (and separately buys/sells) over interval
 def custom_agg_function(data):
