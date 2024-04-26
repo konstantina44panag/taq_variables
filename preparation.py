@@ -107,8 +107,7 @@ tradessigns = analyzer.classify_trades()
 
 print(tradessigns)
 
-#More datasets for analysis
-
+#Datasets for analysis
 trades = trades[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 Ask = Ask[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 Bid = Bid[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
@@ -117,3 +116,10 @@ Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["regular_time", "price
 Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 
+#Last Step before the variables
+trades.set_index('time', inplace=True)
+Ask.set_index('time', inplace=True)
+Bid.set_index('time', inplace=True)
+Buys_trades.set_index('time', inplace=True)
+Sells_trades.set_index('time', inplace=True)
+tradeswithsign.set_index('time', inplace=True)
