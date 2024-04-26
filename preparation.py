@@ -88,9 +88,9 @@ print(tradessigns)
 
 #More datasets for analysis
 
-Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["time", "price", "vol"]]
-Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["time", "price", "vol"]]
-tradeswithsign = tradessigns[["time", "price", "vol"]]
+Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["time_org", "price", "vol"]].rename(columns={"time_org": "time"})
+Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["time_org", "price", "vol"]].rename(columns={"time_org": "time"})
+tradeswithsign = tradessigns[["time_org", "price", "vol"]].rename(columns={"time_org": "time"})
 
 
 #Set the time index
