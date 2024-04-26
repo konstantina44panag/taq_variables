@@ -62,42 +62,11 @@ trades = trades.rename(columns={"TIME_M": "regular_time", "PRICE": "price", "SIZ
 Ask = Ask.rename(columns={"TIME_M": "regular_time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
 Bid = Bid.rename(columns={"TIME_M": "regular_time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
 
-trades["regular_time"] = trades["regular_time"].astype(str).astype(float).astype(np.float64)
-Ask["regular_time"] = Ask["regular_time"].astype(str).astype(float).astype(np.float64)
-Bid["regular_time"] = Bid["regular_time"].astype(str).astype(float).astype(np.float64)
+trades['regular_time'] = pd.to_datetime(trades['regular_time'].str.decode('utf-8'))
+Ask['regular_time'] = pd.to_datetime(Ask['regular_time'].str.decode('utf-8'))
+Bid['regular_time'] = pd.to_datetime(Bid['regular_time'].str.decode('utf-8'))
 
 print(trades)
-
-trades["time"] = trades["regular_time"]
-Ask["time"] = Ask["regular_time"]
-Bid["time"] = Bid["regular_time"]
-
-trades["regular_time"] = pd.to_datetime(trades['regular_time'], unit='ns') 
-Ask["regular_time"] = pd.to_datetime(Ask['regular_time'], unit='ns')
-Bid["regular_time"] = pd.to_datetime(Bid['regular_time'], unit='ns')
-
-trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
-Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
-Bid["vol"] = Bid["vol"].astype(str).astype(float).astype(np.int64)
-
-trades["price"] = trades["price"].astype(str).astype(float).astype(np.float64)
-Ask["price"] = Ask["price"].astype(str).astype(float).astype(np.float64)
-Bid["price"] = Bid["price"].astype(str).astype(float).astype(np.float64)
-
-# Trade sign estimation
-analyzer = TradeAnalyzer(trades, Ask, Bid)
-tradessigns = analyzer.classify_trades()
-
-print(tradessigns)
-
-#Datasets for analysis
-trades = trades[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-Ask = Ask[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-Bid = Bid[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-
-Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 
 
 
