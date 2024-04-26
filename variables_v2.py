@@ -20,6 +20,7 @@ parser.add_argument(
     type=str,
     help="The dataset path within the HDF5 file for complete nbbo data.",
 )
+parser.add_argument("base_date", type=str, help="The base date for the dataset in YYYY-MM-DD format.")
 
 args = parser.parse_args()
 
@@ -27,7 +28,8 @@ subprocess.run([
     "python3.11", "preparation.py",
     args.hdf5_file_path,
     args.ctm_dataset_path,
-    args.complete_nbbo_dataset_path
+    args.complete_nbbo_dataset_path,
+    args.base_date 
 ])
 
 
