@@ -72,15 +72,15 @@ trades = trades.rename(columns={"TIME_M": "regular_time", "PRICE": "price", "SIZ
 Ask = Ask.rename(columns={"TIME_M": "regular_time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
 Bid = Bid.rename(columns={"TIME_M": "regular_time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
 
-trades["regular_time"] = trades["regular_time"].astype(str)
-Ask["regular_time"] = Ask["regular_time"].astype(str)
-Bid["regular_time"] = Bid["regular_time"].astype(str)
+trades["regular_time"] = trades["regular_time"].astype(str).astype(float).astype(np.float64)
+Ask["regular_time"] = Ask["regular_time"].astype(str).astype(float).astype(np.float64)
+Bid["regular_time"] = Bid["regular_time"].astype(str).astype(float).astype(np.float64)
 
 print(trades)
 
-trades["time"] = trades["regular_time"].astype(float).astype(np.float64)
-Ask["time"] = Ask["regular_time"].astype(float).astype(np.float64)
-Bid["time"] = Bid["regular_time"].astype(float).astype(np.float64)
+trades["time"] = trades["regular_time"]
+Ask["time"] = Ask["regular_time"]
+Bid["time"] = Bid["regular_time"]
 
 trades["regular_time"] =  handle_time_format(trades["regular_time"])
 Ask["regular_time"] =  handle_time_format(Ask["regular_time"])
