@@ -62,7 +62,7 @@ def load_dataset(hdf_file, dataset_path, columns_of_interest):
         raise Exception(f"An error occurred: {e}")
         
 # Main script execution
-pd.set_option("display.max_rows", 500)
+pd.set_option("display.max_rows", 10)
 
 # Load datasets
 with tables.open_file(args.hdf5_file_path, 'r') as hdf:
