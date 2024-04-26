@@ -105,12 +105,6 @@ tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(
     columns={"regular_time": "time"}
 )
 
-
-#Set the time index
-trades.set_index('time', inplace=True)
-Ask.set_index('time', inplace=True)
-Bid.set_index('time', inplace=True)
-
 #Data cleaning
 trades = trades.dropna(subset=["time", "price", "vol"])
 Buys_trades = Buys_trades.dropna(subset=["time", "price", "vol"])
@@ -119,4 +113,10 @@ Ask = Ask.dropna(subset=["time", "price", "vol"])
 Bid = Bid.dropna(subset=["time", "price", "vol"])
 tradeswithsign = tradeswithsign.dropna(subset=["time", "price", "vol"])
 
+
+
+#Set the time index
+trades.set_index('time', inplace=True)
+Ask.set_index('time', inplace=True)
+Bid.set_index('time', inplace=True)
 
