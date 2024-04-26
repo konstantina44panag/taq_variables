@@ -107,7 +107,7 @@ print(tradessigns)
 
 trades = trades[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 Ask = Ask[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-Bid = Bid[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"}
+Bid = Bid[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 
 Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
