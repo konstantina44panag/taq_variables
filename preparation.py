@@ -33,7 +33,6 @@ def handle_time_format(time_col):
     ).dt.time
     return time_col.dt.time
 
-
 def time_to_seconds(t):
     return (t.hour * 3600 + t.minute * 60 + t.second) + t.microsecond / 1e6
 
@@ -79,6 +78,10 @@ Bid["regular_time"] = Bid["regular_time"].astype(str)
 
 print(trades)
 
+trades["time"] = trades["regular_time"].astype(float).astype(np.float64)
+Ask["time"] = Ask["regular_time"].astype(float).astype(np.float64)
+Bid["time"] = Bid["regular_time"].astype(float).astype(np.float64)
+
 trades["regular_time"] =  handle_time_format(trades["regular_time"])
 Ask["regular_time"] =  handle_time_format(Ask["regular_time"])
 Bid["regular_time"] =  handle_time_format(Bid["regular_time"])
@@ -86,10 +89,6 @@ Bid["regular_time"] =  handle_time_format(Bid["regular_time"])
 trades.reset_index(drop=True, inplace=True)
 Ask.reset_index(drop=True, inplace=True)
 Bid.reset_index(drop=True, inplace=True)
-
-trades["time"] = trades["regular_time"].apply(time_to_seconds)
-Ask["time"] = Ask["regular_time"].apply(time_to_seconds)
-Bid["time"] = Bid["regular_time"].apply(time_to_seconds)
 
 trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
 Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
