@@ -72,6 +72,10 @@ trades.reset_index(drop=True, inplace=True)
 Ask.reset_index(drop=True, inplace=True)
 Bid.reset_index(drop=True, inplace=True)
 
+trades["time"] = trades["regular_time"]
+Ask["time"] = Ask["regular_time"]
+Bid["time"] = Bid["regular_time"]
+
 trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
 Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
 Bid["vol"] = Bid["vol"].astype(str).astype(float).astype(np.int64)
