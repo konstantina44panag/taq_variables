@@ -87,7 +87,6 @@ print(bids_1min_after_930)
 Buys_trades["value"] = Buys_trades["price"] * Buys_trades["vol"]
 Sells_trades["value"] = Sells_trades["price"] * Sells_trades["vol"]
 
-
 def custom_agg_function(data):
     filtered_trades = data[data["value"] >= 10000]
     if not filtered_trades.empty:
@@ -96,22 +95,16 @@ def custom_agg_function(data):
         return np.nan
 
 aggr_buys_1min = Buys_trades.resample("1min", on="time").apply(custom_agg_function)
-aggr_buys_1min = aggr_buys_1min.rename("aggressive buyer's price")
-agrr_sells_1min = Sells_trades.resample("1min", on="time").apply(custom_agg_function)
-agrr_sells_1min = agrr_sells_1min.rename("aggressive seller's price")
+aggr_sells_1min = Sells_trades.resample("1min", on="time").apply(custom_agg_function)
 
-aggr_buys_1min.rename(
-    columns={ "price": "last_buyer_price_4" }, inplace=True,
-)
-agrr_sells_1min.rename(
-    columns={ "price": "last_seller_price_4" }, inplace=True,
-)
+aggr_buys_1min_df = pd.DataFrame(aggr_buys_1min, columns=["last_buyer_price_4"])
+aggr_sells_1min_df = pd.DataFrame(aggr_sells_1min, columns=["last_seller_price_4"])
 
-aggr_buys_1min_after_930 = aggr_buys_1min.between_time("09:30", "16:00")
-agrr_sells_1min_after_930= agrr_sells_1min.between_time("09:30", "16:00")
+aggr_buys_1min_after_930 = aggr_buys_1min_df.between_time("09:30", "16:00")
+aggr_sells_1min_after_930 = aggr_sells_1min_df.between_time("09:30", "16:00")
 
 print(aggr_buys_1min_after_930)
-print(agrr_sells_1min_after_930)
+print(aggr_sells_1min_after_930)
 
 # 5.VWAP of trades (and separately buys/sells) over interval
 def custom_agg_function(data):
@@ -123,31 +116,17 @@ def custom_agg_function(data):
     else:
         return weighted_prices / total_volume
 
-
 vwap_trades_1min = trades.resample("1min", on="time").apply(custom_agg_function)
-vwap_trades_1min = vwap_trades_1min.rename("volume_weighted_price")
+vwap_buys_1min = Buys_trades.resample("1min", on="time").apply(custom_agg_function)
+vwap_sells_1min = Sells_trades.resample("1min", on="time").apply(custom_agg_function)
 
-vwap_buys_1min = Buys_trades.resample("1min", on="time").agg(custom_agg_function)
-vwap_buys_1min = vwap_buys_1min.rename("volume_weighted_price")
+vwap_trades_1min_df = pd.DataFrame(vwap_trades_1min, columns=["vwap_trades_5"])
+vwap_buys_1min_df = pd.DataFrame(vwap_buys_1min, columns=["vwap_buys_5"])
+vwap_sells_1min_df = pd.DataFrame(vwap_sells_1min, columns=["vwap_sells_5"])
 
-vwap_sells_1min = Sells_trades.resample("1min", on="time").agg(custom_agg_function)
-vwap_sells_1min = vwap_sells_1min.rename("volume_weighted_price")
-
-
-vwap_trades_1min.rename(
-    columns={ "price": "vwap_trades_5" }, inplace=True,
-)
-vwap_buys_1min.rename(
-    columns={ "price": "vwap_buys_5" }, inplace=True,
-)
-vwap_sells_1min.rename(
-    columns={ "price": "vwap_sells_5" }, inplace=True,
-)
-
-
-vwap_trades_1min_after_930 = vwap_trades_1min.between_time("09:30", "16:00")
-vwap_buys_1min_after_930 = vwap_buys_1min.between_time("09:30", "16:00")
-vwap_sells_1min_after_930 = vwap_sells_1min.between_time("09:30", "16:00")
+vwap_trades_1min_after_930 = vwap_trades_1min_df.between_time("09:30", "16:00")
+vwap_buys_1min_after_930 = vwap_buys_1min_df.between_time("09:30", "16:00")
+vwap_sells_1min_after_930 = vwap_sells_1min_df.between_time("09:30", "16:00")
 
 print(vwap_trades_1min_after_930)
 print(vwap_buys_1min_after_930)
