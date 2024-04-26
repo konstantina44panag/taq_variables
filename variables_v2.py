@@ -73,9 +73,13 @@ bids_1min.rename(
     inplace=True,
 )
 
-print(trades_1min)
-print(asks_1min)
-print(bids_1min)
+trades_1min_after_930 = trades_1min.between_time("09:30", "16:00")
+asks_1min_after_930 = asks_1min.between_time("09:30", "16:00")
+bids_1min_after_930 = bids_1min.between_time("09:30", "16:00")
+
+print(trades_1min_after_930)
+print(asks_1min_after_930)
+print(bids_1min_after_930)
 
 
 
