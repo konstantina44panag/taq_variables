@@ -60,21 +60,17 @@ with tables.open_file(args.hdf5_file_path, 'r') as hdf:
     hdf.close()
 
 # Rename and convert columns
-trades = trades.rename(columns={"TIME_M": "regular_time", "PRICE": "price", "SIZE": "vol"})
-Ask = Ask.rename(columns={"TIME_M": "regular_time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
-Bid = Bid.rename(columns={"TIME_M": "regular_time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
+trades = trades.rename(columns={"TIME_M": "time", "PRICE": "price", "SIZE": "vol"})
+Ask = Ask.rename(columns={"TIME_M": "time", "BEST_ASK": "price", "Best_AskSizeShares": "vol"})
+Bid = Bid.rename(columns={"TIME_M": "time", "BEST_BID": "price", "Best_BidSizeShares": "vol"})
 
-trades["regular_time"] = handle_time_format(trades["regular_time"])
-Ask["regular_time"] = handle_time_format(Ask["regular_time"])
-Bid["regular_time"] = handle_time_format(Bid["regular_time"])
+trades["time"] = handle_time_format(trades["time"])
+Ask["time"] = handle_time_format(Ask["time"])
+Bid["time"] = handle_time_format(Bid["time"])
 
 trades.reset_index(drop=True, inplace=True)
 Ask.reset_index(drop=True, inplace=True)
 Bid.reset_index(drop=True, inplace=True)
-
-trades["time"] = trades["regular_time"]
-Ask["time"] = Ask["regular_time"]
-Bid["time"] = Bid["regular_time"]
 
 trades['vol'] = trades['vol'].astype(str).astype(float).astype(np.int64)
 Ask["vol"] = Ask["vol"].astype(str).astype(float).astype(np.int64)
@@ -90,20 +86,11 @@ tradessigns = analyzer.classify_trades()
 
 print(tradessigns)
 
-#Datasets for analysis
-trades = trades[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-Ask = Ask[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-Bid = Bid[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+#More datasets for analysis
 
-Buys_trades = tradessigns[tradessigns["Initiator"] == 1][
-    ["regular_time", "price", "vol"]
-].rename(columns={"regular_time": "time"})
-Sells_trades = tradessigns[tradessigns["Initiator"] == -1][
-    ["regular_time", "price", "vol"]
-].rename(columns={"regular_time": "time"})
-tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(
-    columns={"regular_time": "time"}
-)
+Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["time", "price", "vol"]]
+Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["time", "price", "vol"]]
+tradeswithsign = tradessigns[["time", "price", "vol"]]
 
 #Data cleaning
 trades = trades.dropna(subset=["time", "price", "vol"])
