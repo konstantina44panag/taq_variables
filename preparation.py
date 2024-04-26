@@ -102,15 +102,15 @@ analyzer = TradeAnalyzer(trades, Ask, Bid)
 tradessigns = analyzer.classify_trades()
 
 #Datasets for analysis
-trades = trades[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-Ask = Ask[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-Bid = Bid[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+trades = trades[["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
+Ask = Ask[["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
+Bid = Bid[["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
 
 print(trades)
 
-Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
-tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
+Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
+Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
+tradeswithsign = tradessigns[["datetime", "price", "vol"]].rename(columns={"datetime": "time"})
 
 trades.set_index('time', inplace=True)
 Ask.set_index('time', inplace=True)
