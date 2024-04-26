@@ -113,4 +113,4 @@ Buys_trades = tradessigns[tradessigns["Initiator"] == 1][["regular_time", "price
 Sells_trades = tradessigns[tradessigns["Initiator"] == -1][["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 tradeswithsign = tradessigns[["regular_time", "price", "vol"]].rename(columns={"regular_time": "time"})
 
-
+print(trades)
