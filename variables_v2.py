@@ -6,34 +6,47 @@ import numpy as np
 import subprocess
 import argparse
 
-parser = argparse.ArgumentParser(
-    description="Prepare datasets for trade sign analysis and variable estimation."
-)
-parser.add_argument("hdf5_file_path", type=str, help="The path to the HDF5 file.")
-parser.add_argument(
-    "ctm_dataset_path",
-    type=str,
-    help="The dataset path within the HDF5 file for ctm data.",
-)
-parser.add_argument(
-    "complete_nbbo_dataset_path",
-    type=str,
-    help="The dataset path within the HDF5 file for complete nbbo data.",
-)
-parser.add_argument("base_date", type=str, help="The base date for the dataset in YYYY-MM-DD format.")
+# Parse arguments
+parser = argparse.ArgumentParser(description="Prepare datasets for trade sign analysis and variable estimation.")
+parser.add_argument("hdf5_file_path", type=str, help="The path to the original HDF5 file.")
+parser.add_argument("base_date", type=str, help="Base date for the analysis.")
+parser.add_argument("stock_name", type=str, help="Stock symbol.")
+parser.add_argument("year", type=str, help="Year of the data.")
+parser.add_argument("month", type=str, help="Month of the data.")
+parser.add_argument("day", type=str, help="Day of the data.")
+parser.add_argument("ctm_dataset_path", type=str, help="The dataset path within the HDF5 file for ctm data.")
+parser.add_argument("complete_nbbo_dataset_path", type=str, help="The dataset path within the HDF5 file for complete nbbo data.")
 
-args = parser.parse_args()
+args, unknown = parser.parse_known_args()
 
-subprocess.run([
+# Constructing file paths based on the arguments
+hdf5_variable_path = f'/home/taq/taq_variables/{args.year}{args.month}_var.h5'
+print(f"Output HDF5 file path: {hdf5_variable_path}")
+
+# Run preparation.py with the required arguments
+result = subprocess.run([
     "python3.11", "preparation.py",
     args.hdf5_file_path,
+    args.base_date,
+    args.stock_name,
+    args.year,
+    args.month,
+    args.day,
     args.ctm_dataset_path,
-    args.complete_nbbo_dataset_path,
-    args.base_date 
-])
+    args.complete_nbbo_dataset_path
+], capture_output=True, text=True)
 
+if result.returncode != 0:
+    print("Error running preparation.py:", result.stderr)
+else:
+    print("preparation.py ran successfully:", result.stdout)
 
-from preparation import trades, Buys_trades, Sells_trades, Ask, Bid, tradeswithsign
+# Import variables from preparation.py
+try:
+    from preparation import trades, Buys_trades, Sells_trades, Ask, Bid, tradeswithsign
+except ImportError as e:
+    print(f"Failed to import variables from preparation.py: {e}")
+    exit(1)
 
 
 # 1,2,3. The last trade/bid/ask price, volume, and timestamp
@@ -347,5 +360,40 @@ merged_df = pd.concat([
     trades_resampled_after_930, trades_changes_after_930, Ask_changes_after_930, Bid_changes_after_930
 ], axis=1)
 
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 10) 
 print(merged_df)
-merged_df.to_csv("IBM_20090302_variables.csv", index=True)
+print(merged_df.dtypes)
+merged_df_reset = merged_df.reset_index()
+
+for col in merged_df_reset.columns:
+    if merged_df_reset[col].dtype == 'object':
+        merged_df_reset[col] = merged_df_reset[col].astype(str)
+
+datetime_columns = []
+for col in merged_df_reset.columns:
+    if merged_df_reset[col].dtype == 'datetime64[ns]':
+        merged_df_reset[col] = merged_df_reset[col].dt.strftime('%Y-%m-%d %H:%M:%S.%f')
+        datetime_columns.append(col)
+
+output_file_path = '/home/taq/taq_variables/datetime_columns.txt'
+
+try:
+    with open(output_file_path, 'w') as f:
+        for column in datetime_columns:
+            f.write(f"{column}\n")
+    print("Datetime column names have been successfully written to the file.")
+except IOError as e:
+    print(f"An error occurred while writing to the file: {e}")
+
+print(f"Saving data to HDF5 file: {hdf5_variable_path}")
+with pd.HDFStore(hdf5_variable_path, mode='a', complevel=9, complib='zlib') as store:
+    hdf5_key = f'/{args.stock_name}/day{args.day}/time_bars'
+    # Replace `merged_df_reset` with your actual DataFrame
+    store.put(hdf5_key, merged_df_reset, format='table', data_columns=True)
+    print(f"Data successfully saved to HDF5 key: {hdf5_key}")
+
+print("Script completed successfully.")
+
+
+

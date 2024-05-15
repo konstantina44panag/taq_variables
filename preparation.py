@@ -9,21 +9,15 @@ import tables
 from sign_algorithms import TradeAnalyzer
 
 # Set up argparse to parse command line arguments
-parser = argparse.ArgumentParser(
-    description="Prepare datasets for trade sign analysis and variable estimation."
-)
+parser = argparse.ArgumentParser(description="Prepare datasets for trade sign analysis and variable estimation.")
 parser.add_argument("hdf5_file_path", type=str, help="The path to the HDF5 file.")
-parser.add_argument(
-    "ctm_dataset_path",
-    type=str,
-    help="The dataset path within the HDF5 file for ctm data."
-)
-parser.add_argument(
-    "complete_nbbo_dataset_path",
-    type=str,
-    help="The dataset path within the HDF5 file for complete nbbo data."
-)
 parser.add_argument("base_date", type=str, help="The base date in YYYY-MM-DD format for time conversions.")
+parser.add_argument("stock_name", type=str, help="Stock symbol.")
+parser.add_argument("year", type=str, help="Year of the data.")
+parser.add_argument("month", type=str, help="Month of the data.")
+parser.add_argument("day", type=str, help="Day of the data.")
+parser.add_argument("ctm_dataset_path", type=str, help="The dataset path within the HDF5 file for ctm data.")
+parser.add_argument("complete_nbbo_dataset_path", type=str, help="The dataset path within the HDF5 file for complete nbbo data.")
 
 args = parser.parse_args()
 
@@ -39,14 +33,14 @@ def convert_float_to_datetime(df, float_column, base_date):
     df.drop(columns=['timedelta'], inplace=True)
     
     return df
+
     
 def load_dataset(hdf_file, dataset_path, columns_of_interest):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
     try:
         dataset = hdf_file.get_node(dataset_path)
-        
         column_names = [dataset._v_attrs[attr_name] for attr_name in dataset._v_attrs._f_list() if '_kind' in attr_name]
-        column_names = [item for sublist in column_names for item in sublist]  # Flatten list if needed
+        column_names = [item for sublist in column_names for item in sublist]
 
         data = {}
         for col in column_names:
@@ -59,7 +53,7 @@ def load_dataset(hdf_file, dataset_path, columns_of_interest):
         raise ValueError(f"Dataset path not found: {dataset_path}")
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
-        
+
 # Main script execution
 pd.set_option("display.max_rows", 10)
 
