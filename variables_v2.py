@@ -43,7 +43,7 @@ else:
 
 # Import variables from preparation.py
 try:
-    from preparation import trades, Buys_trades, Sells_trades, Ask, Bid, tradeswithsign
+    from preparation import trades, Buys_trades, Sells_trades, Ask, Bid
 except ImportError as e:
     print(f"Failed to import variables from preparation.py: {e}")
     exit(1)
