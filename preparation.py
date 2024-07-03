@@ -7,6 +7,8 @@ import time
 import sys
 import traceback
 from datetime import datetime
+import polars as pl
+from numba import njit
 
 # Configure logging
 logging.basicConfig(
@@ -19,7 +21,7 @@ def print_debug_info(df, name):
     print(df.head())
     print(df.columns)
     print(f"DataFrame shape: {df.shape}")
-    
+
 def convert_float_to_datetime(df, float_column, base_date):
     """Converts float time values to datetime objects based on a base date."""
     midnight = pd.to_datetime(base_date + " 00:00:00")
@@ -51,9 +53,9 @@ def load_dataset(
                 data[col] = dataset.col(col)
 
         for col in column_names:
-            if corr_pattern in col and "corr_col" not in data:
+            if corr_pattern in col:
                 data["corr"] = dataset.col(col)
-            elif cond_pattern in col and "cond_col" not in data:
+            elif cond_pattern in col:
                 data["cond"] = dataset.col(col)
 
         df = pd.DataFrame(data)
@@ -97,7 +99,7 @@ def load_dataset_with_exclusion(
         raise ValueError(f"Dataset path not found: {dataset_path}")
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
-
+    
 def decode_byte_strings(df):
     """Decode byte strings in all columns of the dataframe."""
     for col in df.columns:
@@ -107,82 +109,66 @@ def decode_byte_strings(df):
             )
     return df
 
-def find_na_or_inf(df):
-    na_mask = df.isna()
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    inf_mask = np.isinf(df[numeric_cols])
-    combined_mask = na_mask | inf_mask
-    na_inf_rows = df[combined_mask.any(axis=1)]
-    return na_inf_rows
+#def check_price_column_for_more_than_17_chars(df):
+#    """Check if any value in the PRICE column has more than 16 characters."""
+#    if "PRICE" in df.columns:
+#        price_col = df["PRICE"].to_numpy()
+#
+#        lengths = np.vectorize(len)(price_col)
+#        
+#        if np.any(lengths > 17):
+#            print("Values in the PRICE column with more than 16 characters:")
+#            values_with_more_than_16_chars = price_col[lengths > 16]
+#            for value in values_with_more_than_16_chars:
+#                print(value)
+#        else:
+#            print("No value in the PRICE column has more than 16 characters.")
+#    else:
+#        print("PRICE column not found in the DataFrame.")
 
 def handle_duplicates(df, key_col, value_cols, other_cols=None):
     """
-    Handle duplicates by taking the median for the value columns and the last value for other columns.
+    Handle duplicates using Polars by taking the median for the value columns and the last value for other columns.
     If other_cols is not provided, only the value_cols will be aggregated.
     """
-    agg_funcs = {col: "median" for col in value_cols}
-    if other_cols:
-        for col in other_cols:
-            agg_funcs[col] = "last"
-    df = df.groupby(key_col).agg(agg_funcs).reset_index()
-    return df
+    pl_df = pl.from_pandas(df)
 
-def clean_zeros(df):
-    return df.dropna(subset=["price"]).loc[df["price"] != 0]
+    agg_exprs = [pl.col(col).median().alias(col) for col in value_cols]
+    if other_cols:
+        agg_exprs.extend([pl.col(col).last().alias(col) for col in other_cols])
+    
+    result = pl_df.groupby(key_col).agg(agg_exprs)
+
+    result_df = result.to_pandas().reset_index()
+    result_df = result_df.sort_values(by=key_col).reset_index(drop=True)
+
+    return result_df
+
 
 def identify_retail(z):
             if 0 < z < 0.4 or 0.6 < z < 1:
                 return 'retail trade'
             else:
                 return 'non-retail trade'
-            
-def calculate_returns(df, price_col='price', time_col='time'):
-    """
-    Calculate returns from a DataFrame containing price and time columns.
 
-    Parameters:
-    df (pd.DataFrame): The input DataFrame containing price and time columns.
-    price_col (str): The name of the price column. Default is 'price'.
-    time_col (str): The name of the time column. Default is 'time'.
-
-    Returns:
-    pd.DataFrame: A DataFrame containing the time and returns columns.
-    """
-    df["log_price"] = np.log(df[price_col])
-    
-    returns_df = pd.DataFrame()
-    returns_df["time"] = df[time_col]
-    returns_df["returns"] = df["log_price"].diff()
-    
-    returns_df = returns_df.dropna().reset_index(drop=True)
-    
-    df.drop(columns=["log_price"], inplace=True)
-    
-    return returns_df
-
+   
 def calculate_returns_shift(df, price_col='price', time_col='time', additional_cols=[]):
-    """
-    Calculate returns from a DataFrame containing price and time columns using the shift method.
-
-    Parameters:
-    df (pd.DataFrame): The input DataFrame containing price and time columns.
-    price_col (str): The name of the price column. Default is 'price'.
-    time_col (str): The name of the time column. Default is 'time'.
-    additional_cols (list): List of additional columns to keep in the output DataFrame. Default is an empty list.
-
-    Returns:
-    pd.DataFrame: A DataFrame containing the time, returns, and additional columns.
-    """
-    returns_df = pd.DataFrame()
-    returns_df["time"] = df[time_col]
-    returns_df["returns"] = np.log(df[price_col] / df[price_col].shift(1))
+ 
+    prices = df[price_col].values
+    times = df[time_col].values
     
+    returns = np.zeros_like(prices)
+    returns[1:] = np.log(prices[1:] / prices[:-1])
+
+    returns_df = pd.DataFrame({
+        'time': times,
+        'returns': returns
+    })
+
     if additional_cols:
         for col in additional_cols:
-            returns_df[col] = df[col]
+            returns_df[col] = df[col].values
 
-    returns_df = returns_df.reset_index(drop=True)
-    
     return returns_df
 
 def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path):
@@ -216,18 +202,37 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         load_end_time = time.time()
         load_time = load_end_time - load_start_time
 
-        clean_start_time = time.time()
-
+        decode_start_time = time.time()
         trades = decode_byte_strings(trades)
         nbbos = decode_byte_strings(nbbos)
+        decode_end_time = time.time()
 
         logging.info("Cleaning data")
-        trades["PRICE"] = pd.to_numeric(trades["PRICE"], errors="coerce")
-        trades["SIZE"] = pd.to_numeric(trades["SIZE"], errors="coerce")
-       
-        trades = trades.dropna(subset=["PRICE", "SIZE"]).loc[
-            (trades["PRICE"] != 0) & (trades["SIZE"] != 0)
-        ]
+        #Formatting
+        #trades
+        format_start_time = time.time()
+        trades["TIME_M"] = np.array(trades["TIME_M"], dtype=np.float64)
+        trades = convert_float_to_datetime(trades, "TIME_M", base_date) 
+        trades['PRICE'] = np.array(trades['PRICE'], dtype=np.float64)
+        trades['SIZE'] = np.array(trades['SIZE'], dtype=np.float64)
+        trades["EX"] = trades["EX"].astype(str)
+        trades["corr"] = trades["corr"].astype(str)
+        trades["cond"] = trades["cond"].astype(str)
+
+        mask = ~np.isnan(trades['PRICE'].values) | ~np.isnan(trades['SIZE'].values) | \
+            (trades['PRICE'].values != 0) | (trades['SIZE'].values != 0)
+        trades = trades.loc[mask]
+
+        trades.rename(columns={
+            "TIME_M": "time",
+            "PRICE": "price",
+            "SIZE": "vol"
+        }, inplace=True)
+
+        #nbbo
+        nbbos["TIME_M"] = np.array(nbbos["TIME_M"], dtype=np.float64)
+        nbbos = convert_float_to_datetime(nbbos, "TIME_M", base_date)
+
         columns_to_convert = [
             "Best_AskSizeShares",
             "Best_BidSizeShares",
@@ -235,50 +240,70 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             "BEST_BID",
         ]
         for col in columns_to_convert:
-            nbbos[col] = pd.to_numeric(nbbos[col], errors="coerce")
-        nbbos = nbbos.dropna(
-            subset=["Best_AskSizeShares", "Best_BidSizeShares", "BEST_ASK", "BEST_BID"]
-        ).loc[
-            (nbbos["Best_AskSizeShares"] != 0)
-            & (nbbos["Best_BidSizeShares"] != 0)
-            & (nbbos["BEST_ASK"] != 0)
-            & (nbbos["BEST_BID"] != 0)
-        ]
-        #Formatting
-        trades["EX"] = trades["EX"].astype(str)
+            nbbos[col] = np.array(nbbos[col], dtype=np.float64)
 
-        trades["TIME_M"] = trades["TIME_M"].astype(str).astype(float).astype(np.float64)
-        nbbos["TIME_M"] = nbbos["TIME_M"].astype(str).astype(float).astype(np.float64)
-        trades["time"] = trades["TIME_M"]
-        nbbos["time"] = nbbos["TIME_M"]
-        trades.drop(columns=["TIME_M"], inplace=True)
-        nbbos.drop(columns=["TIME_M"], inplace=True)
+        mask = np.zeros(len(nbbos), dtype=bool)
+        for col in columns_to_convert:
+            mask |= np.isnan(nbbos[col].values) | (nbbos[col].values <= 0)
+        nbbos = nbbos.loc[~mask]
 
-        trades["SIZE"] = trades["SIZE"].astype(float).astype(np.int64)
-        nbbos["Best_AskSizeShares"] = (
-            nbbos["Best_AskSizeShares"].astype(float).astype(np.int64)
-        )
-        nbbos["Best_BidSizeShares"] = (
-            nbbos["Best_BidSizeShares"].astype(float).astype(np.int64)
-        )
+        nbbos["qu_cond"] = nbbos["qu_cond"].astype(str)
+        nbbos.rename(columns={"TIME_M": "time"}, inplace=True)
 
-        trades["PRICE"] = trades["PRICE"].astype(float).astype(np.float64)
-        nbbos["BEST_ASK"] = nbbos["BEST_ASK"].astype(float).astype(np.float64)
-        nbbos["BEST_BID"] = nbbos["BEST_BID"].astype(float).astype(np.float64)
+        format_end_time = time.time()
 
-        # Data Cleaning
+        #Data cleaning
+        clean_only_start_time = time.time()
+
+        @njit
+        def rolling_median_exclude_self(series, window):
+            medians = []
+            for i in range(len(series)):
+                if i < window // 2 or i >= len(series) - window // 2:
+                    medians.append(np.nan)
+                else:
+                    window_data = np.delete(series[i - window // 2:i + window // 2 + 1], window // 2)
+                    medians.append(np.median(window_data))
+            return np.array(medians)
+
+        @njit
+        def rolling_mad_exclude_self(series, window):
+            mads = []
+            for i in range(len(series)):
+                if i < window // 2 or i >= len(series) - window // 2:
+                    mads.append(np.nan)
+                else:
+                    window_data = np.delete(series[i - window // 2:i + window // 2 + 1], window // 2)
+                    median = np.median(window_data)
+                    mad = np.mean(np.abs(window_data - median))
+                    mads.append(mad)
+            return np.array(mads)
+        
+        #Clean trades      
         trades = trades[trades['corr'] == '00']
-        trades = trades.rename(columns={"PRICE": "price", "SIZE": "vol"})
+        trades['rolling_median'] = rolling_median_exclude_self(trades['price'].values, 51)
+        trades['rolling_mad'] = rolling_mad_exclude_self(trades['price'].values, 51)
+        trades['exclude'] = np.abs(trades['price'] - trades['rolling_median']) > 10 * trades['rolling_mad']
+        trades = trades[~trades['exclude']]
 
-        nbbos = handle_duplicates(nbbos, key_col='time', value_cols=['BEST_ASK', 'BEST_BID'], other_cols=['Best_AskSizeShares', 'Best_BidSizeShares', 'qu_cond'])
-        trades = handle_duplicates(trades, key_col='time', value_cols=['price'], other_cols=['vol', "corr", "cond", "EX"])
+        trades = handle_duplicates(trades, key_col='datetime', value_cols=['price'], other_cols=['time', 'vol', "corr", "cond", "EX"])
 
-        nbbos = nbbos[nbbos["BEST_ASK"] >= nbbos["BEST_BID"]]
+        #Clean nbbo
+        nbbos = nbbos[nbbos['BEST_ASK'] >= nbbos['BEST_BID']]
+        nbbos['spread'] = nbbos['BEST_ASK'] - nbbos['BEST_BID']
+        med_spread = np.median(nbbos['spread'])
+        nbbos = nbbos[nbbos['spread'] <= 50 * med_spread]
+        nbbos['midpoint'] = (nbbos['BEST_BID'] + nbbos['BEST_ASK']) / 2
+        nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 51)
+        nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 51)
+        nbbos['exclude'] = np.abs(nbbos['midpoint'] - nbbos['rolling_median']) > 10 * nbbos['rolling_mad']
+        nbbos = nbbos[~nbbos['exclude']]
 
-        trades = convert_float_to_datetime(trades, "time", base_date)
-        nbbos = convert_float_to_datetime(nbbos, "time", base_date)
+        nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID', 'midpoint'], other_cols=['time', 'Best_AskSizeShares', 'Best_BidSizeShares', 'qu_cond'])
+        clean_only_end_time = time.time()
 
-        #Define Ask, Bid, Midprice dataframes
+        #Define the dataframes for variable calculations
+        #Define the Ask and Bid
         Ask = nbbos[
             ["time", "datetime", "BEST_ASK", "Best_AskSizeShares", "qu_cond"]
         ].copy()
@@ -287,43 +312,42 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             ["time", "datetime", "BEST_BID", "Best_BidSizeShares", "qu_cond"]
         ].copy()
         Bid.rename(columns={"BEST_BID": "price", "Best_BidSizeShares": "vol"}, inplace=True)
-        nbbos['midpoint'] = (nbbos['BEST_BID'] + nbbos['BEST_ASK']) / 2
-        Midpoint = nbbos[['datetime', 'midpoint']].rename(
-            columns={"datetime" : "time", "midpoint": "price"}
-        )
-        nbbos['bid_change'] = nbbos['BEST_BID'].diff().fillna(0) != 0
-        nbbos['bid_size_change'] = nbbos['Best_BidSizeShares'].diff().fillna(0) != 0
-        nbbos['ask_change'] = nbbos['BEST_ASK'].diff().fillna(0) != 0
-        nbbos['ask_size_change'] = nbbos['Best_AskSizeShares'].diff().fillna(0) != 0
-
-        nbbos['sign'] = ((nbbos['bid_change'] | nbbos['bid_size_change']).astype(int) - 
-                 (nbbos['ask_change'] | nbbos['ask_size_change']).astype(int))
-        nbbo_signs = nbbos[['datetime', 'sign']].rename(
-            columns={"datetime": "time"}
+     
+        #Define the Midpoint
+        Midpoint = nbbos[['datetime', 'midpoint']].copy()
+        Midpoint.rename(
+            columns={"datetime" : "time", "midpoint": "price"}, inplace=True
         )
 
-        logging.info("Checking for NA or inf values before conversion to int")
-        na_inf_trades = find_na_or_inf(trades)
-        na_inf_ask = find_na_or_inf(Ask)
-        na_inf_bid = find_na_or_inf(Bid)
+        #Define the nbbo_signs
+        nbbo_start_time = time.time()
+        best_bid = nbbos['BEST_BID'].values
+        best_bid_size_shares = nbbos['Best_BidSizeShares'].values
+        best_ask = nbbos['BEST_ASK'].values
+        best_ask_size_shares = nbbos['Best_AskSizeShares'].values
 
-        if not na_inf_trades.empty:
-            logging.warning("NA or inf values in trades dataframe:")
-            logging.warning(na_inf_trades)
+        bid_change = np.diff(best_bid, prepend=best_bid[0]) != 0
+        bid_size_change = np.diff(best_bid_size_shares, prepend=best_bid_size_shares[0]) != 0
+        ask_change = np.diff(best_ask, prepend=best_ask[0]) != 0
+        ask_size_change = np.diff(best_ask_size_shares, prepend=best_ask_size_shares[0]) != 0
 
-        if not na_inf_ask.empty:
-            logging.warning("NA or inf values in Ask dataframe:")
-            logging.warning(na_inf_ask)
+        sign = (bid_change | bid_size_change).astype(int) - (ask_change | ask_size_change).astype(int)
+        vol = np.where(sign == 1, best_bid_size_shares, np.where(sign == -1, best_ask_size_shares, 0))
 
-        if not na_inf_bid.empty:
-            logging.warning("NA or inf values in Bid dataframe:")
-            logging.warning(na_inf_bid)
+        nbbos['sign'] = sign
+        nbbos['vol_sign'] = vol
+        nbbo_signs = nbbos[['datetime', 'sign', 'vol_sign']].copy()
+        nbbo_signs.rename(
+            columns={"datetime": "time", "sign": "returns", "vol_sign":"vol"}, inplace=True
+        )
+        nbbo_end_time = time.time() 
 
-        trades.reset_index(drop=True, inplace=True)
-        Ask.reset_index(drop=True, inplace=True)
-        Bid.reset_index(drop=True, inplace=True)
-        Midpoint.reset_index(drop=True, inplace=True)
-        nbbo_signs.reset_index(drop=True, inplace=True)
+        #Create a value column
+        trades['value'] = trades['price'] * trades['vol'] 
+        Ask['value'] = Ask['price'] * Ask['vol'] 
+        Bid['value'] = Bid['price'] * Bid['vol']
+
+        #Trade Signs estimation
 
         trsigns_start_time = time.time()
         logging.info("Estimating trade signs")
@@ -332,98 +356,64 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trsigns_end_time = time.time()
         trsigns_time = trsigns_end_time - trsigns_start_time
 
-        trades.reset_index(drop=True, inplace=True)
-        tradessigns.reset_index(drop=True, inplace=True)
-        Ask.reset_index(drop=True, inplace=True)
-        Bid.reset_index(drop=True, inplace=True)
+        logging.info("More preparation")
+        trades.sort_values(by="datetime", inplace=True)
+        tradessigns.sort_values(by='datetime', inplace=True)
+        Ask.sort_values(by="datetime", inplace=True)
+        Bid.sort_values(by="datetime", inplace=True)
+        Midpoint.sort_values(by="time", inplace=True) 
 
-        logging.info("Preparing datasets for analysis")
-        Ask = Ask[["datetime", "price", "vol", "qu_cond"]].rename(
-            columns={"datetime": "time"}
-        )
-        Bid = Bid[["datetime", "price", "vol", "qu_cond"]].rename(
-            columns={"datetime": "time"}
-        )
+        trades.drop(columns=["time"], inplace=True)
+        trades.rename(columns={"datetime": "time"}, inplace=True)
+        tradessigns.drop(columns=["time", "time_org"], inplace=True)
+        tradessigns.rename(columns={"datetime": "time"}, inplace=True)
+        Ask.drop(columns=["time"], inplace=True)
+        Ask.rename(columns={"datetime": "time"}, inplace=True)
+        Bid.drop(columns=["time"], inplace=True)
+        Bid.rename(columns={"datetime": "time"}, inplace=True)
+        
+        #Define the Buys_trades and Sell_trades
+        buyes_sells_start_time = time.time()
 
-        Buys_trades = tradessigns[tradessigns["Initiator"] == 1][
-            ["datetime", "price", "vol", "corr", "cond", "EX"]
-        ].rename(columns={"datetime": "time"})
-
-        Sells_trades = tradessigns[tradessigns["Initiator"] == -1][
-            ["datetime", "price", "vol", "corr", "cond", "EX"]
-        ].rename(columns={"datetime": "time"})
-
-        Retail_trades = tradessigns[tradessigns["EX"] == "D"][
-            ["datetime", "price", "vol", "corr", "cond", "EX", "Initiator"]].rename(columns={"datetime": "time", "Initiator": "sign"})
-        Retail_trades['Z'] = 100 * (Retail_trades['price'] % 0.01)          
+        Buys_trades = tradessigns[tradessigns["Initiator"] == 1].copy()
+        Sells_trades = tradessigns[tradessigns["Initiator"] == -1].copy()
+        
+        #Define the Retail_trades
+        Retail_trades = trades.loc[trades["EX"] == "D"].copy()
+        Retail_trades['Z'] = 100 * (Retail_trades['price'] % 0.01)        
         Retail_trades['trade_type'] = Retail_trades['Z'].apply(identify_retail)
         Retail_trades = Retail_trades[Retail_trades['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
 
+        #Define the Oddlot_trades
         target_date = datetime(2014, 1, 1)
-        Oddlot_trades = tradessigns[(tradessigns['datetime'] >= target_date) & (tradessigns['cond'] == "I")][["datetime", "price", "vol", "corr", "cond", "EX", "Initiator"]].rename(columns={"datetime": "time", "Initiator": "sign"})
-       
-        trade_returns = calculate_returns_shift(tradessigns, price_col='price', time_col='datetime', additional_cols=['vol'])
+        Oddlot_trades = trades[(trades['time'] >= target_date) & (trades['cond'] == "I")].copy()
+        buyes_sells_end_time = time.time()
+        #Define the Returns
+        returns_start_time = time.time()
+
+        trade_returns = calculate_returns_shift(trades, price_col='price', time_col='time', additional_cols=['vol'])
         midprice_returns = calculate_returns_shift(Midpoint, price_col='price', time_col='time')
-        print_debug_info(trade_returns, "Trade Returns:")
-        print_debug_info(midprice_returns, "Midprice Returns:")
+        returns_end_time = time.time()
+
+        #Define the trade_signs
         trade_signs = tradessigns[
-            ["datetime", "Initiator"]].rename(columns={"datetime": "time", "Initiator": "sign"})
+            ["time", "Initiator", "vol"]].copy()
+        trade_signs.rename(columns={"Initiator": "returns"}, inplace=True)
+        sort_start_time = time.time()
 
-        #Test that trade sign aglorithm doesnt distort the rest of the columns
-        trades_test1 = tradessigns[
-            ["datetime", "price", "vol", "Initiator", "corr", "cond", "EX"]
-        ].rename(columns={"datetime": "time"})
+        
+        sort_end_time = time.time()
 
-        trades_test2 = pd.merge(
-            trades[["datetime", "price", "vol", "corr", "cond", "EX"]].rename(
-                columns={"datetime": "time"}
-            ),
-            tradessigns[["datetime", "Initiator"]].rename(columns={"datetime": "time"}),
-            on="time",
-            how="inner",
-        )
-
-        trades_test2 = trades_test2[trades_test1.columns]
-        if trades_test1.equals(trades_test2):
-            logging.info("The two DataFrames are the same.")
-        else:
-            logging.error("The two DataFrames are not the same.")
-            if trades_test1.shape != trades_test2.shape:
-                logging.error(
-                    f"Shape mismatch: trades_test1.shape={trades_test1.shape}, trades_v2.shape={trades_test2.shape}"
-                )
-            if list(trades_test1.columns) != list(trades_test2.columns):
-                logging.error(
-                    f"Column names mismatch: trades_v1.columns={trades_test1.columns}, trades_test2.columns={trades_test2.columns}"
-                )
-            comparison = trades_test1.compare(trades_test2, keep_shape=True, keep_equal=True)
-            logging.error(f"Differences:\n{comparison}")
-            sys.exit(1)
-
-        trades = trades_test1
-        Buys_trades.reset_index(drop=True, inplace=True)
-        Sells_trades.reset_index(drop=True, inplace=True)
-        Retail_trades.reset_index(drop=True, inplace=True)
-        trades.sort_values(by="time", inplace=True)
-        Ask.sort_values(by="time", inplace=True)
-        Bid.sort_values(by="time", inplace=True)
-        Buys_trades.sort_values(by="time", inplace=True)
-        Sells_trades.sort_values(by="time", inplace=True)
-        Retail_trades.sort_values(by="time", inplace=True)
-        Midpoint.sort_values(by="time", inplace=True)
-        Oddlot_trades.sort_values(by="time", inplace=True)
-        trade_returns.sort_values(by="time", inplace=True)
-        midprice_returns.sort_values(by="time", inplace=True)
-        trade_signs.sort_values(by="time", inplace=True)
-        nbbo_signs.sort_values(by="time", inplace=True)
-
-
-        clean_end_time = time.time()
-        clean_time = clean_end_time - clean_start_time - trsigns_time
         with open("preparation_timeanalysis.txt", "a") as f:
             f.write(f"Stock: {stock_name}\n")
-            f.write(f"Read time: {load_time} seconds\n")
-            f.write(f"Clean time: {clean_time} seconds\n")
+            f.write(f"Load time: {load_time} seconds\n")
+            f.write(f"decode time: {decode_end_time - decode_start_time} seconds\n")
+            f.write(f"format time: {format_end_time - format_start_time} seconds\n")
+            f.write(f"Clean time: {clean_only_end_time - clean_only_start_time} seconds\n")
+            f.write(f"nbbo sign time: {nbbo_end_time - nbbo_start_time} seconds\n")
+            f.write(f"buys_sells time: {buyes_sells_end_time - buyes_sells_start_time} seconds\n")
+            f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
+            f.write(f"sort time: {sort_end_time - sort_start_time} seconds\n")
             f.write(f"TradeSigns time: {trsigns_time} seconds\n")
 
         return trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs

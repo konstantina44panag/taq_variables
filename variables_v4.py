@@ -11,7 +11,6 @@ import polars as pl
 from datetime import timedelta
 from datetime import datetime
 from preparation import prepare_datasets
-
 # Parse arguments
 parser = argparse.ArgumentParser(
     description="Prepare datasets for trade sign analysis and variable estimation."
@@ -61,6 +60,11 @@ def main():
 
     #Customized Functions for calculating variables
       
+    def auction_conditions(df):
+        pl_df = pl.from_pandas(df)
+        special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|L|M|P|X|6|9'))
+        return special_conditions_df.select(['time', 'price', 'vol', 'EX', 'cond']).to_pandas()
+
     def calculate_minute_volatility(returns):
         n = len(returns)
         if n <= 1:
@@ -88,8 +92,8 @@ def main():
         if 'time' in df2.columns:
             df2.set_index('time', inplace=True)
 
-        df1_filtered = df1.between_time("09:30", "16:00")
-        df2_filtered = df2.between_time("09:30", "16:00")
+        df1_filtered = df1.between_time("09:30", "16:00").copy()
+        df2_filtered = df2.between_time("09:30", "16:00").copy()
         
         if df1_filtered.empty or df2_filtered.empty:
             return None
@@ -106,35 +110,33 @@ def main():
         
         pl_df = pl.from_pandas(df)
 
-        resampled_df = pl_df.groupby_dynamic('time', every='1m', closed='left').agg([
-        pl.col('OIB_SHR').apply(calculate_minute_volatility, return_dtype=pl.Float64).alias('VOIB_SHR'),
-        pl.col('OIB_SHR').apply(calculate_autocorrelation, return_dtype=pl.Float64).alias('OIB_SHR_autocorr'),
+        resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
+        pl.col('OIB_SHR').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('VOIB_SHR'),
+        pl.col('OIB_SHR').map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias('OIB_SHR_autocorr'),
         ])
         return resampled_df.to_pandas().set_index('time')
             
-
-    #below fix the names
           
-    def apply_return_aggregations(pl_df, column='returns'):
+    def apply_return_aggregations(pl_df, column='returns', df_name=''):
         if pl_df is None or pl_df.shape[0] == 0 or pl_df.select(pl.col(column).is_null().any()).item():
             return None
-
-        # Perform dynamic grouping and calculate volatility and autocorrelation
-        resampled_df = pl_df.groupby_dynamic('time', every='1m', closed='left').agg([
-            pl.col(column).apply(calculate_minute_volatility, return_dtype=pl.Float64).alias('trade_ret_volatility'),
-            pl.col(column).apply(calculate_autocorrelation, return_dtype=pl.Float64).alias('trade_ret_autocorr'),
+        volatility_col_name = f'{df_name}_volatility'
+        autocorr_col_name = f'{df_name}_autocorr'
+        resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
+            pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
+            pl.col(column).map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias(autocorr_col_name),
         ])
         return resampled_df.to_pandas().set_index('time')
         
               
-    def apply_return_aggregations_outside_trading(pl_df, column='returns'):
+    def apply_return_aggregations_outside_trading(pl_df, column='returns',df_name=''):
         if pl_df is None or pl_df.shape[0] == 0 or pl_df.select(pl.col(column).is_null().any()).item():
             return None
-
-        # Perform dynamic grouping and calculate volatility and autocorrelation
-        resampled_df = pl_df.groupby_dynamic('time', every='30m', closed='left').agg([
-            pl.col(column).apply(calculate_minute_volatility, return_dtype=pl.Float64).alias('trade_ret_volatility'),
-            pl.col(column).apply(calculate_autocorrelation, return_dtype=pl.Float64).alias('trade_ret_autocorr'),
+        volatility_col_name = f'{df_name}_volatility'
+        autocorr_col_name = f'{df_name}_autocorr'
+        resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left').agg([
+            pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
+            pl.col(column).map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias(autocorr_col_name),
         ])
         return resampled_df.to_pandas().set_index('time')
 
@@ -142,8 +144,8 @@ def main():
     def apply_ret_variances_aggregations(pl_df, column='returns'):
         if pl_df is None or pl_df.shape[0] == 0 or pl_df.select(pl.col(column).is_null().all()).item():
             return None
-        resampled_df = pl_df.groupby_dynamic('time', every='1m', closed='left').agg([
-        pl.col(column).apply(calculate_minute_volatility, return_dtype=pl.Float64).alias('variance')])
+        resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
+        pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('variance')])
            
         return resampled_df.to_pandas().set_index('time')
     
@@ -169,22 +171,16 @@ def main():
             return None
         if len(df) == 1:
             return df
-        if 'value' not in df.columns:
-            df['value'] = df['price'] * df['vol']
-        
-
-        df_filtered = df[['price', 'vol', 'value']]
-        df_filtered = df_filtered.between_time("09:29", "16:00")
+        df_filtered = df.between_time("09:29", "16:00").copy()
 
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
         
         df_filtered.reset_index(inplace = True)
         df_filtered['durations'] = df_filtered['time'].diff().fillna(pd.Timedelta(seconds=0)).dt.total_seconds()
-
         df_filtered['weighted_price'] = df_filtered['price'] * df_filtered['durations']
-        pl_df = pl.from_pandas(df_filtered)
 
+        pl_df = pl.from_pandas(df_filtered)
 
         try:
             seconds_df = pl_df.group_by_dynamic('time', every='1s', label='left').agg([
@@ -229,22 +225,18 @@ def main():
             return None
         if len(df) == 1:
             return df
-        if 'value' not in df.columns:
-            df['value'] = df['price'] * df['vol']
-
-        df_filtered = df[['price', 'vol', 'value']]
 
         start_time_morning = f"{base_date} 09:30"
         end_time_afternoon = f"{base_date} 16:00"
-        df_filtered = df.loc[(df.index < start_time_morning) | (df.index > end_time_afternoon)]
+        df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
         
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
         
         df_filtered.reset_index(inplace = True)
         df_filtered['durations'] = df_filtered['time'].diff().fillna(pd.Timedelta(seconds=0)).dt.total_seconds()
-
         df_filtered['weighted_price'] = df_filtered['price'] * df_filtered['durations']
+
         pl_df = pl.from_pandas(df_filtered)
 
         try:
@@ -289,20 +281,16 @@ def main():
             return None
         if len(df) == 1:
             return df
-        if 'value' not in df.columns:
-            df['value'] = df['price'] * df['vol']
 
-        df_filtered = df[['price', 'vol', 'value', 'qu_cond']]
-
-        df_filtered = df.between_time("09:29", "16:00")
+        df_filtered = df.between_time("09:29", "16:00").copy()
 
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
         
         df_filtered.reset_index(inplace = True)
         df_filtered['durations'] = df_filtered['time'].diff().fillna(pd.Timedelta(seconds=0)).dt.total_seconds()
-
         df_filtered['weighted_price'] = df_filtered['price'] * df_filtered['durations']
+
         pl_df = pl.from_pandas(df_filtered)
 
         try:
@@ -320,16 +308,9 @@ def main():
             def calculate_twap_pl():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
             
-            def encode_conditions_expr(column):
-                conditions = {'D': 1, 'P': 2, 'J': 4, 'K': 8}
-                
-                encoded_col = pl.lit(0)
-                
-                for cond, code in conditions.items():
-                    encoded_col += pl.when(pl.col(column).str.contains(cond)).then(pl.lit(code)).otherwise(pl.lit(0))
-                
-                return encoded_col.alias('encoded_conditions')
-                        
+            def encode_conditions_expr():
+                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'QOLMPX69']), return_dtype=pl.Utf8)
+            
             aggregations = [
                 pl.col('price').last().alias(f'{df_name}_last_price'),
                 pl.col('vol').last().alias(f'{df_name}_last_vol'),
@@ -340,7 +321,7 @@ def main():
                 calculate_vwap_pl().alias(f'{df_name}_vwap'),
                 calculate_twap_pl().alias(f'{df_name}_twap'),
                 pl.count('price').alias(f'{df_name}_num_events'),
-                encode_conditions_expr('qu_cond').sum().alias(f'{df_name}_qu_cond')
+                encode_conditions_expr().alias(f'{df_name}_cond_indic')
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg(aggregations)
@@ -356,23 +337,19 @@ def main():
             return None
         if len(df) == 1:
             return df
-        if 'value' not in df.columns:
-            df['value'] = df['price'] * df['vol']
-
-        df_filtered = df[['price', 'vol', 'value', 'qu_cond']]
         
         start_time_morning = f"{base_date} 09:30"
         end_time_afternoon = f"{base_date} 16:00"
-        df_filtered = df.loc[(df.index < start_time_morning) | (df.index > end_time_afternoon)]
+        df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
 
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
         
         df_filtered.reset_index(inplace = True)
         df_filtered['durations'] = df_filtered['time'].diff().fillna(pd.Timedelta(seconds=0)).dt.total_seconds()
-
         df_filtered['weighted_price'] = df_filtered['price'] * df_filtered['durations']
-        pl_df = pl.from_pandas(df_filtered) 
+
+        pl_df = pl.from_pandas(df_filtered)
 
         try:
             seconds_df = pl_df.group_by_dynamic('time', every='1s', label='left').agg([
@@ -389,16 +366,9 @@ def main():
             def calculate_twap_pl():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
             
-            def encode_conditions_expr(column):
-                conditions = {'D': 1, 'P': 2, 'J': 4, 'K': 8}
-                
-                encoded_col = pl.lit(0)
-                
-                for cond, code in conditions.items():
-                    encoded_col += pl.when(pl.col(column).str.contains(cond)).then(pl.lit(code)).otherwise(pl.lit(0))
-                
-                return encoded_col.alias('encoded_conditions')
-                        
+            def encode_conditions_expr():
+                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'QOLMPX69']), return_dtype=pl.Utf8)
+            
             aggregations = [
                 pl.col('price').last().alias(f'{df_name}_last_price'),
                 pl.col('vol').last().alias(f'{df_name}_last_vol'),
@@ -409,7 +379,7 @@ def main():
                 calculate_vwap_pl().alias(f'{df_name}_vwap'),
                 calculate_twap_pl().alias(f'{df_name}_twap'),
                 pl.count('price').alias(f'{df_name}_num_events'),
-                encode_conditions_expr('qu_cond').sum().alias(f'{df_name}_qu_cond')
+                encode_conditions_expr().alias(f'{df_name}_cond_indic')
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left', label='left').agg(aggregations)
@@ -431,7 +401,7 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
 
-        df_filtered = df.between_time("09:29", "16:00")
+        df_filtered = df.between_time("09:29", "16:00").copy()
 
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
@@ -473,7 +443,7 @@ def main():
 
         start_time_morning = f"{base_date} 09:30"
         end_time_afternoon = f"{base_date} 16:00"
-        df_filtered = df.loc[(df.index < start_time_morning) | (df.index > end_time_afternoon)]
+        df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
 
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
@@ -517,9 +487,9 @@ def main():
         if outside_trading:
             start_time_morning = f"{base_date} 09:30"
             end_time_afternoon = f"{base_date} 16:00"
-            df_filtered = df.loc[(df.index < start_time_morning) | (df.index > end_time_afternoon)]
+            df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
         else:
-            df_filtered = df.between_time("09:29", "16:00")
+            df_filtered = df.between_time("09:29", "16:00").copy()
         
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
@@ -535,7 +505,6 @@ def main():
 
         aggregations = [
             calculate_vwapr_expr().alias('returns'),
-            pl.col('vol').first().alias('vol')
         ] if 'vol' in df.columns else [
             calculate_mean_return_expr().alias('returns')
         ]
@@ -556,6 +525,10 @@ def main():
 
 
     # Processing Trades
+    start_auction_time = time.time()
+    auction_conditions_df = auction_conditions(trades)
+    end_auction_time = time.time()
+
     start_process_trades_time = time.time()
     trade_dataframes_to_process = {
         "trades": trades,
@@ -572,10 +545,10 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
       
-        df_filtered = df.between_time("09:29", "16:00")
+        df_filtered = df.between_time("09:29", "16:00").copy()
         start_time_morning = f"{args.base_date} 09:30"
         end_time_afternoon = f"{args.base_date} 16:00"
-        df_filtered_outside = df.loc[(df.index < start_time_morning) | (df.index > end_time_afternoon)]
+        df_filtered_outside = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
 
         if not df_filtered.empty:
             try:
@@ -623,9 +596,8 @@ def main():
             return None
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
-        if 'value' not in df.columns:
-            df['value'] = df['price'] * df['vol']
-        df_filtered = df.between_time('09:30', '16:00')
+
+        df_filtered = df.between_time('09:30', '16:00').copy()
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
         
@@ -672,10 +644,10 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
       
-        df_filtered = df.between_time("09:29", "16:00")
+        df_filtered = df.between_time("09:29", "16:00").copy()
         start_time_morning = f"{args.base_date} 09:30"
         end_time_afternoon = f"{args.base_date} 16:00"
-        df_filtered_outside = df.loc[(df.index < start_time_morning) | (df.index > end_time_afternoon)]
+        df_filtered_outside = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
         
         if not df_filtered.empty:
             try:
@@ -711,10 +683,10 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
       
-        df_filtered = df.between_time("09:29", "16:00")
+        df_filtered = df.between_time("09:29", "16:00").copy()
         start_time_morning = f"{args.base_date} 09:30"
         end_time_afternoon = f"{args.base_date} 16:00"
-        df_filtered_outside = df.loc[(df.index < start_time_morning) | (df.index > end_time_afternoon)]
+        df_filtered_outside = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
 
         if not df_filtered.empty:
             try:
@@ -742,16 +714,23 @@ def main():
     print(f"Processing Returns")
     start_process_returns_time = time.time()
 
-    trade_returns_1s = process_resample_data(trade_returns, '1s', args.base_date)
+    trade_returns_1s = process_resample_data(trade_returns, '1s', args.base_date)    
     midprice_returns_1s = process_resample_data(midprice_returns, '1s', args.base_date)
     trade_returns_1s_outside_trading = process_resample_data(trade_returns, '1s', args.base_date, outside_trading=True)
     midprice_returns_1s_outside_trading = process_resample_data(midprice_returns, '1s', args.base_date, outside_trading=True)
+    nbbo_signs_1s = process_resample_data(nbbo_signs, '1s', args.base_date)
+    trade_signs_1s = process_resample_data(trade_signs, '1s', args.base_date)
+    nbbo_signs_1s_outside_trading = process_resample_data(nbbo_signs, '1s', args.base_date, outside_trading=True)
+    trade_signs_1s_outside_trading = process_resample_data(trade_signs, '1s', args.base_date, outside_trading=True)
 
-    aggregated_data["trade_returns"] = reindex_to_full_time(apply_return_aggregations(trade_returns_1s), args.base_date)
-    aggregated_data["midprice_returns"] = reindex_to_full_time(apply_return_aggregations(midprice_returns_1s),  args.base_date)
-    aggregated_data_outside_trading["trade_returns"] = reindex_to_full_time(apply_return_aggregations_outside_trading(trade_returns_1s_outside_trading),  args.base_date, outside_trading=True)
-    aggregated_data_outside_trading["midprice_returns"] = reindex_to_full_time(apply_return_aggregations_outside_trading(midprice_returns_1s_outside_trading),  args.base_date, outside_trading=True)
-    
+    aggregated_data["trade_returns"] = reindex_to_full_time(apply_return_aggregations(trade_returns_1s, column='returns', df_name='trade_ret'), args.base_date)
+    aggregated_data["midprice_returns"] = reindex_to_full_time(apply_return_aggregations(midprice_returns_1s, column='returns', df_name='midprice_ret'),  args.base_date)
+    aggregated_data["nbbo_sign_stat"] = reindex_to_full_time(apply_return_aggregations(nbbo_signs_1s, column='returns', df_name='nbbo_sign'),  args.base_date)
+    aggregated_data["trade_sign_stat"] = reindex_to_full_time(apply_return_aggregations(trade_signs_1s, column='returns', df_name='trade_sign'),  args.base_date)
+    aggregated_data_outside_trading["trade_returns"] = reindex_to_full_time(apply_return_aggregations_outside_trading(trade_returns_1s_outside_trading, column='returns', df_name='trade_ret'),  args.base_date, outside_trading=True)
+    aggregated_data_outside_trading["midprice_returns"] = reindex_to_full_time(apply_return_aggregations_outside_trading(midprice_returns_1s_outside_trading, column='returns', df_name='midprice_ret'),  args.base_date, outside_trading=True)
+    aggregated_data_outside_trading["nbbo_sign_stat"] = reindex_to_full_time(apply_return_aggregations_outside_trading(nbbo_signs_1s_outside_trading, column='returns', df_name='nbbo_sign'),  args.base_date, outside_trading=True)
+    aggregated_data_outside_trading["trade_sign_stat"] = reindex_to_full_time(apply_return_aggregations_outside_trading(trade_signs_1s_outside_trading, column='returns', df_name='trade_sign'),  args.base_date, outside_trading=True)
     end_process_returns_time = time.time()
 
     #Variance Ratios
@@ -798,7 +777,6 @@ def main():
     end_process_vr_returns_time = time.time()
 
     
-
     #End calculation time
     main_end_time = time.time()
     #    print("Structure of aggregated_data:")
@@ -833,12 +811,8 @@ def main():
     consolidated_df_outside_trading.reset_index(inplace=True)
     consolidated_df_outside_trading.rename(columns={'index': 'time'}, inplace=True)
 
-    # Print consolidated_df to ensure it's a DataFrame
-    #print(consolidated_df)
-    #print(consolidated_df_outside_trading)
 
-
-    def process_and_save_df(df, hdf5_variable_path, output_file_path, stock_name, day, month, year, time_range_name):
+    def process_and_save_df(df, hdf5_variable_path, stock_name, day, month, year, time_range_name):
         if not df.empty:
             # Convert object columns to string
             for col in df.columns:
@@ -851,15 +825,6 @@ def main():
                 if df[col].dtype == "datetime64[ns]":
                     df[col] = df[col].dt.strftime("%Y-%m-%d %H:%M:%S.%f")
                     datetime_columns.append(col)
-            
-            # Write datetime column names to a file
-            try:
-                with open(output_file_path, "w") as f:
-                    for column in datetime_columns:
-                        f.write(f"{column}\n")
-                print("Datetime column names have been successfully written to the file.")
-            except IOError as e:
-                print(f"An error occurred while writing to the file: {e}")
             
             # Save data to HDF5 file
             print(f"Saving data to HDF5 file: {hdf5_variable_path}")
@@ -880,17 +845,19 @@ def main():
                 print(f"An error occurred while writing to the file: {e}")
 
     if consolidated_df is not None and not consolidated_df.empty:
-        output_file_path_consolidated = "/home/taq/taq_variables/datetime_columns_consolidated.txt"
-        process_and_save_df(consolidated_df, hdf5_variable_path, output_file_path_consolidated, args.stock_name, args.day, args.month, args.year, "time_bars")
+        process_and_save_df(consolidated_df, hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "time_bars")
     else:
         print("Consolidated DataFrame is empty or None. Skipping save.")
 
     if consolidated_df_outside_trading is not None and not consolidated_df_outside_trading.empty:
-        output_file_path_outside = "/home/taq/taq_variables/datetime_columns_outside.txt"
-        process_and_save_df(consolidated_df_outside_trading, hdf5_variable_path, output_file_path_outside, args.stock_name, args.day, args.month, args.year, "outside_trading_time_bars")
+        process_and_save_df(consolidated_df_outside_trading, hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "outside_trading_time_bars")
     else:
         print("Consolidated DataFrame outside trading is empty or None. Skipping save.")
 
+    if auction_conditions_df is not None and not auction_conditions_df.empty:
+        process_and_save_df(auction_conditions_df, hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_auction")
+    else:
+        print("Daily auction, open and close prices not found")
 
     write_end_time = time.time()
 
@@ -898,13 +865,13 @@ def main():
         f.write(f"Stock: {args.stock_name}\n")
         f.write(f"Day: {args.day}\n")
         f.write(f"Only the calculation runtime: {main_end_time - main_start_time} seconds\n")
+        f.write(f"Only the auction processing: {end_auction_time - start_auction_time} seconds\n")
         f.write(f"Only the trade processing: {end_process_trades_time - start_process_trades_time} seconds\n")
         f.write(f"OIB processing: {end_process_ΟΙΒ_trades_time - start_process_ΟΙΒ_trades_time} seconds\n")
         f.write(f"Herfindahl Index processing: {end_process_herfindahl_time- start_process_herfindahl_time} seconds\n")
         f.write(f"Only the quote processing: {end_process_quotes_time - start_process_quotes_time} seconds\n")
         f.write(f"Only the midpoint processing: {end_process_midpoint_time - start_process_midpoint_time} seconds\n")
         f.write(f"Only the return processing: {end_process_returns_time - start_process_returns_time} seconds\n")
-
         f.write(f"Only the variance ratios processing: {end_process_vr_returns_time - start_process_vr_returns_time} seconds\n")
         f.write(f"Write runtime: {write_end_time - write_start_time} seconds\n")
 
