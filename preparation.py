@@ -126,14 +126,21 @@ def decode_byte_strings(df):
 #    else:
 #        print("PRICE column not found in the DataFrame.")
 
-def handle_duplicates(df, key_col, value_cols, other_cols=None):
+
+def handle_duplicates(df, key_col, value_cols, sum_col=None, other_cols=None):
     """
-    Handle duplicates using Polars by taking the median for the value columns and the last value for other columns.
-    If other_cols is not provided, only the value_cols will be aggregated.
+    Handle duplicates using Polars by taking the median for the value columns, the sum for the sum_col,
+    and the last value for other columns. If other_cols is not provided, only the value_cols and sum_col 
+    will be aggregated.
+
     """
     pl_df = pl.from_pandas(df)
 
     agg_exprs = [pl.col(col).median().alias(col) for col in value_cols]
+    
+    if sum_col:
+        agg_exprs.append(pl.col(sum_col).sum().alias(sum_col))
+        
     if other_cols:
         agg_exprs.extend([pl.col(col).last().alias(col) for col in other_cols])
     
@@ -170,6 +177,34 @@ def calculate_returns_shift(df, price_col='price', time_col='time', additional_c
             returns_df[col] = df[col].values
 
     return returns_df
+
+@njit
+def rolling_median_exclude_self(series, window):
+    medians = []
+    for i in range(len(series)):
+        if i < window // 2 or i >= len(series) - window // 2:
+            medians.append(np.nan)
+        else:
+            window_data = np.delete(series[i - window // 2:i + window // 2 + 1], window // 2)
+            medians.append(np.median(window_data))
+    return np.array(medians)
+
+@njit
+def rolling_mad_exclude_self(series, window):
+    mads = []
+    for i in range(len(series)):
+        if i < window // 2 or i >= len(series) - window // 2:
+            mads.append(np.nan)
+        else:
+            window_data = np.delete(series[i - window // 2:i + window // 2 + 1], window // 2)
+            median = np.median(window_data)
+            mad = np.mean(np.abs(window_data - median))
+            mads.append(mad)
+    return np.array(mads)
+
+dummy_data = np.random.rand(100)
+_ = rolling_median_exclude_self(dummy_data, 5)
+_ = rolling_mad_exclude_self(dummy_data, 5)
 
 def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path):
     try:
@@ -219,16 +254,15 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trades["corr"] = trades["corr"].astype(str)
         trades["cond"] = trades["cond"].astype(str)
 
-        mask = ~np.isnan(trades['PRICE'].values) | ~np.isnan(trades['SIZE'].values) | \
-            (trades['PRICE'].values != 0) | (trades['SIZE'].values != 0)
-        trades = trades.loc[mask]
-
         trades.rename(columns={
             "TIME_M": "time",
             "PRICE": "price",
             "SIZE": "vol"
         }, inplace=True)
 
+        mask = (~np.isnan(trades['price'].values)) & (trades['price'].values != 0)
+        trades = trades.loc[mask]
+        
         #nbbo
         nbbos["TIME_M"] = np.array(nbbos["TIME_M"], dtype=np.float64)
         nbbos = convert_float_to_datetime(nbbos, "TIME_M", base_date)
@@ -241,65 +275,64 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         ]
         for col in columns_to_convert:
             nbbos[col] = np.array(nbbos[col], dtype=np.float64)
-
-        mask = np.zeros(len(nbbos), dtype=bool)
-        for col in columns_to_convert:
-            mask |= np.isnan(nbbos[col].values) | (nbbos[col].values <= 0)
-        nbbos = nbbos.loc[~mask]
-
         nbbos["qu_cond"] = nbbos["qu_cond"].astype(str)
         nbbos.rename(columns={"TIME_M": "time"}, inplace=True)
 
+        mask = (~np.isnan(nbbos['BEST_ASK'].values)) & (~np.isnan(nbbos['BEST_BID'].values)) & (nbbos['BEST_ASK'].values != 0) & (nbbos['BEST_BID'].values != 0)
+        nbbos = nbbos.loc[mask]
+        
         format_end_time = time.time()
 
         #Data cleaning
         clean_only_start_time = time.time()
+       
+        #Clean trades
+        pl_trades = pl.from_pandas(trades) 
+        x1 = time.time()  
+        pl_trades = pl_trades.filter(pl_trades['corr'].is_in(['00', '01', '02']))
+        end_x1 = time.time()  
+        x2 = time.time()
+        conditions_to_remove = "BGJKLOTWZ"
+        pl_trades = pl_trades.filter(~pl_trades['cond'].str.contains(f"[{conditions_to_remove}]"))
+        trades = pl_trades.to_pandas()
+        end_x2 = time.time()
 
-        @njit
-        def rolling_median_exclude_self(series, window):
-            medians = []
-            for i in range(len(series)):
-                if i < window // 2 or i >= len(series) - window // 2:
-                    medians.append(np.nan)
-                else:
-                    window_data = np.delete(series[i - window // 2:i + window // 2 + 1], window // 2)
-                    medians.append(np.median(window_data))
-            return np.array(medians)
-
-        @njit
-        def rolling_mad_exclude_self(series, window):
-            mads = []
-            for i in range(len(series)):
-                if i < window // 2 or i >= len(series) - window // 2:
-                    mads.append(np.nan)
-                else:
-                    window_data = np.delete(series[i - window // 2:i + window // 2 + 1], window // 2)
-                    median = np.median(window_data)
-                    mad = np.mean(np.abs(window_data - median))
-                    mads.append(mad)
-            return np.array(mads)
-        
-        #Clean trades      
-        trades = trades[trades['corr'] == '00']
+        print(trades)
+        print(nbbos)
+        x3 = time.time()
         trades['rolling_median'] = rolling_median_exclude_self(trades['price'].values, 51)
         trades['rolling_mad'] = rolling_mad_exclude_self(trades['price'].values, 51)
         trades['exclude'] = np.abs(trades['price'] - trades['rolling_median']) > 10 * trades['rolling_mad']
         trades = trades[~trades['exclude']]
-
-        trades = handle_duplicates(trades, key_col='datetime', value_cols=['price'], other_cols=['time', 'vol', "corr", "cond", "EX"])
-
+        end_x3 = time.time()
+        
+        x4 = time.time()
+        trades = handle_duplicates(trades, key_col='datetime', value_cols=['price'], sum_col=['vol'], other_cols=['time', "corr", "cond", "EX"])
+        end_x4 = time.time()
         #Clean nbbo
-        nbbos = nbbos[nbbos['BEST_ASK'] >= nbbos['BEST_BID']]
-        nbbos['spread'] = nbbos['BEST_ASK'] - nbbos['BEST_BID']
-        med_spread = np.median(nbbos['spread'])
-        nbbos = nbbos[nbbos['spread'] <= 50 * med_spread]
-        nbbos['midpoint'] = (nbbos['BEST_BID'] + nbbos['BEST_ASK']) / 2
+        y1 = time.time()
+        pl_nbbos = pl.from_pandas(nbbos)
+        pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] >= pl_nbbos['BEST_BID'])
+        end_y1 = time.time()
+        y2 = time.time()
+        pl_nbbos = pl_nbbos.with_columns((pl_nbbos['BEST_ASK'] - pl_nbbos['BEST_BID']).alias('spread'))
+        med_spread = pl_nbbos['spread'].median()
+        pl_nbbos = pl_nbbos.filter(pl_nbbos['spread'] <= 50 * med_spread)
+        end_y2 = time.time()
+
+        y3 = time.time()
+        pl_nbbos = pl_nbbos.with_columns(((pl_nbbos['BEST_BID'] + pl_nbbos['BEST_ASK']) / 2).alias('midpoint'))
+        nbbos = pl_nbbos.to_pandas()
+        end_y3 = time.time()
+        y4 = time.time()
         nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['exclude'] = np.abs(nbbos['midpoint'] - nbbos['rolling_median']) > 10 * nbbos['rolling_mad']
         nbbos = nbbos[~nbbos['exclude']]
-
-        nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID', 'midpoint'], other_cols=['time', 'Best_AskSizeShares', 'Best_BidSizeShares', 'qu_cond'])
+        end_y4 = time.time()
+        y5 = time.time()
+        nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID', 'midpoint'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
+        end_y5 = time.time()
         clean_only_end_time = time.time()
 
         #Define the dataframes for variable calculations
@@ -410,6 +443,15 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             f.write(f"decode time: {decode_end_time - decode_start_time} seconds\n")
             f.write(f"format time: {format_end_time - format_start_time} seconds\n")
             f.write(f"Clean time: {clean_only_end_time - clean_only_start_time} seconds\n")
+            f.write(f"x1 time: {end_x1 - x1} seconds\n")
+            f.write(f"x2 time: {end_x2 - x2} seconds\n")
+            f.write(f"x3 time: {end_x3 - x3} seconds\n")
+            f.write(f"x4 time: {end_x4 - x4} seconds\n")
+            f.write(f"y1 time: {end_y1 - y1} seconds\n")
+            f.write(f"y2 time: {end_y2 - y2} seconds\n")
+            f.write(f"y3 time: {end_y3 - y3} seconds\n")
+            f.write(f"y4 time: {end_y4 - y4} seconds\n")
+            f.write(f"y5 time: {end_y5 - y5} seconds\n")
             f.write(f"nbbo sign time: {nbbo_end_time - nbbo_start_time} seconds\n")
             f.write(f"buys_sells time: {buyes_sells_end_time - buyes_sells_start_time} seconds\n")
             f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")

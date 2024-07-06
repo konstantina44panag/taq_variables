@@ -37,7 +37,7 @@ parser.add_argument(
 args, unknown = parser.parse_known_args()
 
 # Constructing file paths based on the arguments
-hdf5_variable_path = f"/home/taq/taq_variables/{args.year}{args.month}_{args.stock_name}_variables.h5"
+hdf5_variable_path = f"/home/taq/taq_runs/current_program/{args.year}{args.month}_{args.stock_name}_variables.h5"
 print(f"Output HDF5 file path: {hdf5_variable_path}")
 
 def main():
@@ -62,7 +62,7 @@ def main():
       
     def auction_conditions(df):
         pl_df = pl.from_pandas(df)
-        special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|L|M|P|X|6|9'))
+        special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|M|6|9'))
         return special_conditions_df.select(['time', 'price', 'vol', 'EX', 'cond']).to_pandas()
 
     def calculate_minute_volatility(returns):
@@ -309,7 +309,7 @@ def main():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
             
             def encode_conditions_expr():
-                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'QOLMPX69']), return_dtype=pl.Utf8)
+                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKMNOPQSUVRY']), return_dtype=pl.Utf8)
             
             aggregations = [
                 pl.col('price').last().alias(f'{df_name}_last_price'),
@@ -321,7 +321,7 @@ def main():
                 calculate_vwap_pl().alias(f'{df_name}_vwap'),
                 calculate_twap_pl().alias(f'{df_name}_twap'),
                 pl.count('price').alias(f'{df_name}_num_events'),
-                encode_conditions_expr().alias(f'{df_name}_cond_indic')
+                encode_conditions_expr().alias(f'{df_name}_halt_indic')
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg(aggregations)
@@ -367,7 +367,7 @@ def main():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
             
             def encode_conditions_expr():
-                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'QOLMPX69']), return_dtype=pl.Utf8)
+                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKMNOPQSUVRY']), return_dtype=pl.Utf8)
             
             aggregations = [
                 pl.col('price').last().alias(f'{df_name}_last_price'),
@@ -379,7 +379,7 @@ def main():
                 calculate_vwap_pl().alias(f'{df_name}_vwap'),
                 calculate_twap_pl().alias(f'{df_name}_twap'),
                 pl.count('price').alias(f'{df_name}_num_events'),
-                encode_conditions_expr().alias(f'{df_name}_cond_indic')
+                encode_conditions_expr().alias(f'{df_name}_halt_indic')
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left', label='left').agg(aggregations)
