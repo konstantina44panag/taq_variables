@@ -139,7 +139,7 @@ def handle_duplicates(df, key_col, value_cols, sum_col=None, other_cols=None):
     agg_exprs = [pl.col(col).median().alias(col) for col in value_cols]
     
     if sum_col:
-        agg_exprs.append(pl.col(sum_col).sum().alias(sum_col))
+        agg_exprs.extend([pl.col(col).sum().alias(col) for col in sum_col])
         
     if other_cols:
         agg_exprs.extend([pl.col(col).last().alias(col) for col in other_cols])
