@@ -14,7 +14,10 @@ from numba import njit
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
-
+class NoTradesException(Exception):
+    pass
+class NoNbbosException(Exception):
+    pass
 # Function definitions
 def print_debug_info(df, name):
     print(f"\n{name}")
@@ -134,6 +137,9 @@ def handle_duplicates(df, key_col, value_cols, sum_col=None, other_cols=None):
     will be aggregated.
 
     """
+    if df.shape[0] < 2:
+        return df
+    
     pl_df = pl.from_pandas(df)
 
     agg_exprs = [pl.col(col).median().alias(col) for col in value_cols]
@@ -144,7 +150,7 @@ def handle_duplicates(df, key_col, value_cols, sum_col=None, other_cols=None):
     if other_cols:
         agg_exprs.extend([pl.col(col).last().alias(col) for col in other_cols])
     
-    result = pl_df.groupby(key_col).agg(agg_exprs)
+    result = pl_df.group_by(key_col).agg(agg_exprs)
 
     result_df = result.to_pandas().reset_index()
     result_df = result_df.sort_values(by=key_col).reset_index(drop=True)
@@ -206,7 +212,7 @@ dummy_data = np.random.rand(100)
 _ = rolling_median_exclude_self(dummy_data, 5)
 _ = rolling_mad_exclude_self(dummy_data, 5)
 
-def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path):
+def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path):
     try:
         load_start_time = time.time()
 
@@ -260,8 +266,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             "SIZE": "vol"
         }, inplace=True)
 
-        mask = (~np.isnan(trades['price'].values)) & (trades['price'].values != 0)
-        trades = trades.loc[mask]
         
         #nbbo
         nbbos["TIME_M"] = np.array(nbbos["TIME_M"], dtype=np.float64)
@@ -276,10 +280,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         for col in columns_to_convert:
             nbbos[col] = np.array(nbbos[col], dtype=np.float64)
         nbbos["qu_cond"] = nbbos["qu_cond"].astype(str)
-        nbbos.rename(columns={"TIME_M": "time"}, inplace=True)
-
-        mask = (~np.isnan(nbbos['BEST_ASK'].values)) & (~np.isnan(nbbos['BEST_BID'].values)) & (nbbos['BEST_ASK'].values != 0) & (nbbos['BEST_BID'].values != 0)
-        nbbos = nbbos.loc[mask]
+        nbbos.rename(columns={"TIME_M": "time"}, inplace=True)    
         
         format_end_time = time.time()
 
@@ -287,52 +288,94 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         clean_only_start_time = time.time()
        
         #Clean trades
-        pl_trades = pl.from_pandas(trades) 
+        mask = (~np.isnan(trades['price'].values)) & (trades['price'].values != 0)
+        trades = trades.loc[mask]
+        #switch to polars
+        pl_trades = pl.from_pandas(trades)
+
+        if pl_trades.height == 0:
+            print(f"No trades after cleaning techniques for {stock_name}")
+            raise NoTradesException()
+
         x1 = time.time()  
         pl_trades = pl_trades.filter(pl_trades['corr'].is_in(['00', '01', '02']))
-        end_x1 = time.time()  
+        end_x1 = time.time()
+
+        if pl_trades.height == 0:
+            print(f"No trades after cleaning techniques for {stock_name}")
+            raise NoTradesException()
+
         x2 = time.time()
         conditions_to_remove = "BGJKLOTWZ"
         pl_trades = pl_trades.filter(~pl_trades['cond'].str.contains(f"[{conditions_to_remove}]"))
+
+        if pl_trades.height == 0:
+            print(f"No trades after cleaning techniques for {stock_name}")
+            raise NoTradesException()
+        
+        #switch to pandas
         trades = pl_trades.to_pandas()
         end_x2 = time.time()
-
-        print(trades)
-        print(nbbos)
+                   
         x3 = time.time()
         trades['rolling_median'] = rolling_median_exclude_self(trades['price'].values, 51)
         trades['rolling_mad'] = rolling_mad_exclude_self(trades['price'].values, 51)
         trades['exclude'] = np.abs(trades['price'] - trades['rolling_median']) > 10 * trades['rolling_mad']
         trades = trades[~trades['exclude']]
         end_x3 = time.time()
+
+        if trades.empty:
+            print(f"No trades after cleaning techniques for {stock_name}")
+            raise NoTradesException()
         
         x4 = time.time()
         trades = handle_duplicates(trades, key_col='datetime', value_cols=['price'], sum_col=['vol'], other_cols=['time', "corr", "cond", "EX"])
         end_x4 = time.time()
+
+
         #Clean nbbo
         y1 = time.time()
+        mask = (~np.isnan(nbbos['BEST_ASK'].values)) & (~np.isnan(nbbos['BEST_BID'].values)) & (nbbos['BEST_ASK'].values != 0) & (nbbos['BEST_BID'].values != 0)
+        nbbos = nbbos.loc[mask]        
+        #switch to polars
         pl_nbbos = pl.from_pandas(nbbos)
+
+        if pl_nbbos.height == 0:
+            print(f"No nbbos after cleaning techniques for {stock_name}")
+            raise NoNbbosException()
+        
         pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] >= pl_nbbos['BEST_BID'])
         end_y1 = time.time()
+        if pl_nbbos.height == 0:
+            print(f"No nbbos after cleaning techniques for {stock_name}")
+            raise NoNbbosException()
+        
         y2 = time.time()
         pl_nbbos = pl_nbbos.with_columns((pl_nbbos['BEST_ASK'] - pl_nbbos['BEST_BID']).alias('spread'))
         med_spread = pl_nbbos['spread'].median()
         pl_nbbos = pl_nbbos.filter(pl_nbbos['spread'] <= 50 * med_spread)
         end_y2 = time.time()
+        if pl_nbbos.height == 0:
+            print(f"No nbbos after cleaning techniques for {stock_name}")
+            raise NoNbbosException()
+        
+        pl_nbbos = pl_nbbos.with_columns(((pl_nbbos['BEST_BID'] + pl_nbbos['BEST_ASK']) / 2).alias('midpoint'))
+        #switch to pandas
+        nbbos = pl_nbbos.to_pandas()
 
         y3 = time.time()
-        pl_nbbos = pl_nbbos.with_columns(((pl_nbbos['BEST_BID'] + pl_nbbos['BEST_ASK']) / 2).alias('midpoint'))
-        nbbos = pl_nbbos.to_pandas()
-        end_y3 = time.time()
-        y4 = time.time()
         nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['exclude'] = np.abs(nbbos['midpoint'] - nbbos['rolling_median']) > 10 * nbbos['rolling_mad']
         nbbos = nbbos[~nbbos['exclude']]
-        end_y4 = time.time()
-        y5 = time.time()
+        end_y3 = time.time()
+        if nbbos.empty:
+            print(f"No nbbos after cleaning techniques for {stock_name}")
+            raise NoNbbosException()
+        
+        y4 = time.time()
         nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID', 'midpoint'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
-        end_y5 = time.time()
+        end_y4 = time.time()
         clean_only_end_time = time.time()
 
         #Define the dataframes for variable calculations
@@ -406,7 +449,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Bid.rename(columns={"datetime": "time"}, inplace=True)
         
         #Define the Buys_trades and Sell_trades
-        buyes_sells_start_time = time.time()
+        specific_df_start_time = time.time()
 
         Buys_trades = tradessigns[tradessigns["Initiator"] == 1].copy()
         Sells_trades = tradessigns[tradessigns["Initiator"] == -1].copy()
@@ -420,25 +463,25 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         #Define the Oddlot_trades
         target_date = datetime(2014, 1, 1)
         Oddlot_trades = trades[(trades['time'] >= target_date) & (trades['cond'] == "I")].copy()
-        buyes_sells_end_time = time.time()
+
+        specific_df_end_time = time.time()
         #Define the Returns
         returns_start_time = time.time()
 
         trade_returns = calculate_returns_shift(trades, price_col='price', time_col='time', additional_cols=['vol'])
         midprice_returns = calculate_returns_shift(Midpoint, price_col='price', time_col='time')
+        
         returns_end_time = time.time()
 
         #Define the trade_signs
         trade_signs = tradessigns[
             ["time", "Initiator", "vol"]].copy()
         trade_signs.rename(columns={"Initiator": "returns"}, inplace=True)
-        sort_start_time = time.time()
-
-        
-        sort_end_time = time.time()
+    
 
         with open("preparation_timeanalysis.txt", "a") as f:
             f.write(f"Stock: {stock_name}\n")
+            f.write(f"Day: {base_date}\n")
             f.write(f"Load time: {load_time} seconds\n")
             f.write(f"decode time: {decode_end_time - decode_start_time} seconds\n")
             f.write(f"format time: {format_end_time - format_start_time} seconds\n")
@@ -451,17 +494,20 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             f.write(f"y2 time: {end_y2 - y2} seconds\n")
             f.write(f"y3 time: {end_y3 - y3} seconds\n")
             f.write(f"y4 time: {end_y4 - y4} seconds\n")
-            f.write(f"y5 time: {end_y5 - y5} seconds\n")
             f.write(f"nbbo sign time: {nbbo_end_time - nbbo_start_time} seconds\n")
-            f.write(f"buys_sells time: {buyes_sells_end_time - buyes_sells_start_time} seconds\n")
+            f.write(f"buys_sells time: {specific_df_end_time - specific_df_start_time} seconds\n")
             f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
-            f.write(f"sort time: {sort_end_time - sort_start_time} seconds\n")
             f.write(f"TradeSigns time: {trsigns_time} seconds\n")
 
         return trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs
 
+    except  NoTradesException:
+        return None
+    except  NoNbbosException:
+        return None
 
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         logging.error(traceback.format_exc())
         sys.exit(1)
+

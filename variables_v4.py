@@ -10,7 +10,7 @@ import time
 import polars as pl
 from datetime import timedelta
 from datetime import datetime
-from preparation import prepare_datasets
+from preparation import prepare_datasets, NoTradesException, NoNbbosException
 # Parse arguments
 parser = argparse.ArgumentParser(
     description="Prepare datasets for trade sign analysis and variable estimation."
@@ -33,28 +33,51 @@ parser.add_argument(
     type=str,
     help="The dataset path within the HDF5 file for complete nbbo data.",
 )
+parser.add_argument(
+    "hdf5_variable_path",
+    type=str,
+    help="The path and name of the output variable file",
+)
 
 args, unknown = parser.parse_known_args()
 
 # Constructing file paths based on the arguments
-hdf5_variable_path = f"/home/taq/taq_runs/current_program/{args.year}{args.month}_{args.stock_name}_variables.h5"
-print(f"Output HDF5 file path: {hdf5_variable_path}")
+
+print(f"Output HDF5 file path: {args.hdf5_variable_path}")
 
 def main():
     global aggregated_data
     aggregated_data = {}
     aggregated_data_outside_trading = {}
-    trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = prepare_datasets(
-        args.hdf5_file_path,
-        args.base_date,
-        args.stock_name,
-        args.year,
-        args.month,
-        args.day,
-        args.ctm_dataset_path,
-        args.complete_nbbo_dataset_path
-    )
+    try:
+        result = prepare_datasets(
+            args.hdf5_file_path,
+            args.base_date,
+            args.stock_name,
+            args.year,
+            args.month,
+            args.day,
+            args.ctm_dataset_path,
+            args.complete_nbbo_dataset_path,
+            args.hdf5_variable_path)
 
+        if result is None:
+            print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
+            return
+
+        trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result
+
+    except NoTradesException:
+        print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
+        return
+    except NoNbbosException:
+        print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
+        return
+    
+    except Exception as e:
+        print(f"An error occurred while preparing datasets: {e}")
+        return
+    
     # Start timing the main calculations
     main_start_time = time.time()
 
@@ -107,7 +130,8 @@ def main():
     def apply_voib_shr_aggregations(df):
         if df is None or df.empty or df.isna().all().all():
             return None
-        
+        if df.shape[0] == 1:
+            return None
         pl_df = pl.from_pandas(df)
 
         resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
@@ -118,7 +142,9 @@ def main():
             
           
     def apply_return_aggregations(pl_df, column='returns', df_name=''):
-        if pl_df is None or pl_df.shape[0] == 0 or pl_df.select(pl.col(column).is_null().any()).item():
+        if pl_df is None or pl_df.shape[0] == 0:
+            return None
+        if pl_df.shape[0] == 1:
             return None
         volatility_col_name = f'{df_name}_volatility'
         autocorr_col_name = f'{df_name}_autocorr'
@@ -130,7 +156,9 @@ def main():
         
               
     def apply_return_aggregations_outside_trading(pl_df, column='returns',df_name=''):
-        if pl_df is None or pl_df.shape[0] == 0 or pl_df.select(pl.col(column).is_null().any()).item():
+        if pl_df is None or pl_df.shape[0] == 0:
+            return None
+        if pl_df.shape[0] == 1:
             return None
         volatility_col_name = f'{df_name}_volatility'
         autocorr_col_name = f'{df_name}_autocorr'
@@ -142,7 +170,9 @@ def main():
 
     
     def apply_ret_variances_aggregations(pl_df, column='returns'):
-        if pl_df is None or pl_df.shape[0] == 0 or pl_df.select(pl.col(column).is_null().all()).item():
+        if pl_df is None or pl_df.shape[0] == 0:
+            return None
+        if pl_df.shape[0] == 1:
             return None
         resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
         pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('variance')])
@@ -735,7 +765,7 @@ def main():
 
     #Variance Ratios
     start_process_vr_returns_time = time.time()
-
+    
     for returns_df in [trade_returns, midprice_returns]:
         if returns_df is midprice_returns:
             returns_df_1s = midprice_returns_1s
@@ -745,35 +775,47 @@ def main():
         log_returns_5s = process_resample_data(returns_df, '5s', args.base_date)
         log_returns_15s = process_resample_data(returns_df, '15s', args.base_date)
 
-        ratios = {}
-        ratios["1sec"] = apply_ret_variances_aggregations(returns_df_1s)
-        ratios["5sec"] = apply_ret_variances_aggregations(log_returns_5s)
-        ratios["15sec"] = apply_ret_variances_aggregations(log_returns_15s)
-
-        ratios["1sec"].columns = [col + '_1s' for col in ratios["1sec"].columns]
-        ratios["5sec"].columns = [col + '_5s' for col in ratios["5sec"].columns]
-        ratios["15sec"].columns = [col + '_15s' for col in ratios["15sec"].columns]
-
-        # Merge the two DataFrames on the time index
-        if 'variance_5s' in ratios["5sec"].columns and 'variance_15s' in ratios["15sec"].columns:
-            variance_ratio_df = pd.merge(ratios["5sec"], ratios["15sec"], left_index=True, right_index=True)
-            variance_ratio_df['variance_ratio'] = np.abs((variance_ratio_df['variance_15s'] / (3 * variance_ratio_df['variance_5s'])) - 1)
-            if 'variance_1s' in ratios["1sec"].columns: 
-                variance_ratio_df = pd.merge(variance_ratio_df, ratios["1sec"], left_index=True, right_index=True)
-                variance_ratio_df['variance_ratio2'] = np.abs((variance_ratio_df['variance_5s'] / (5 * variance_ratio_df['variance_1s'])) - 1)
-
-            if returns_df is trade_returns:
-                aggregated_data["trade_returns_variance_ratio1"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
-                if 'variance_1s' in ratios["1sec"].columns: 
-                    aggregated_data["trade_returns_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date) 
-
-            else:
-                aggregated_data["midprice_returns_variance_ratio1"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
-                if 'variance_1s' in ratios["1sec"].columns: 
-                    aggregated_data["midprice_returns_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date) 
-        else:
-            print(f"Missing required columns for variance ratio calculation")
+        ratios_1 = pd.DataFrame()
+        ratios_1 = apply_ret_variances_aggregations(returns_df_1s)
+        ratios_5 = pd.DataFrame()
+        ratios_5 = apply_ret_variances_aggregations(log_returns_5s)
+        ratios_15 = pd.DataFrame()
+        ratios_15 = apply_ret_variances_aggregations(log_returns_15s)
     
+        if (ratios_1 is not None and not ratios_1.empty) or (ratios_5 is not None and not ratios_5.empty) or (ratios_15 is not None and not ratios_15.empty):
+            if ratios_1 is not None and not ratios_1.empty:
+                ratios_1.rename(columns={"variance": "variance_1s"}, inplace=True)
+            if ratios_5 is not None and not ratios_5.empty:
+                ratios_5.rename(columns={"variance": "variance_5s"}, inplace=True)
+            if ratios_15 is not None and not ratios_15.empty:
+                ratios_15.rename(columns={"variance": "variance_15s"}, inplace=True)
+
+            # Merge the two DataFrames on the time index
+            if ratios_5 is not None and not ratios_5.empty and ratios_15 is not None and not ratios_15.empty:
+                variance_ratio_df = pd.merge(ratios_5, ratios_15, left_index=True, right_index=True)
+                variance_ratio_df['variance_ratio'] = np.abs((variance_ratio_df['variance_15s'] / (3 * variance_ratio_df['variance_5s'])) - 1)
+                if ratios_1 is not None and not ratios_1.empty: 
+                    variance_ratio_df = pd.merge(variance_ratio_df, ratios_1, left_index=True, right_index=True)
+                    variance_ratio_df['variance_ratio2'] = np.abs((variance_ratio_df['variance_5s'] / (5 * variance_ratio_df['variance_1s'])) - 1)
+
+                if returns_df is trade_returns:
+                    aggregated_data["trade_returns_variance_ratio1"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
+                    print(f"Variance ratio 1 was calculated for trade/price returns")
+                    if ratios_1 is not None and not ratios_1.empty:
+                        aggregated_data["trade_returns_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date)
+                        print(f"Variance ratio 2 was calculated for trade/price returns")
+
+                else:
+                    aggregated_data["midprice_returns_variance_ratio1"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
+                    print(f"Variance ratio 1 was calculated for midprice returns")
+                    if ratios_1 is not None and not ratios_1.empty:
+                        aggregated_data["midprice_returns_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date)
+                        print(f"Variance ratio 2 was calculated for midprice returns")
+                        
+            else:
+                print(f"Missing required columns for variance ratio calculation")
+        else:
+            print(f"Cammot compute variance ratios for since there is only one second-return for that day")
     end_process_vr_returns_time = time.time()
 
     
@@ -845,17 +887,17 @@ def main():
                 print(f"An error occurred while writing to the file: {e}")
 
     if consolidated_df is not None and not consolidated_df.empty:
-        process_and_save_df(consolidated_df, hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "time_bars")
+        process_and_save_df(consolidated_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "time_bars")
     else:
         print("Consolidated DataFrame is empty or None. Skipping save.")
 
     if consolidated_df_outside_trading is not None and not consolidated_df_outside_trading.empty:
-        process_and_save_df(consolidated_df_outside_trading, hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "outside_trading_time_bars")
+        process_and_save_df(consolidated_df_outside_trading, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "outside_trading_time_bars")
     else:
         print("Consolidated DataFrame outside trading is empty or None. Skipping save.")
 
     if auction_conditions_df is not None and not auction_conditions_df.empty:
-        process_and_save_df(auction_conditions_df, hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_auction")
+        process_and_save_df(auction_conditions_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_auction")
     else:
         print("Daily auction, open and close prices not found")
 
