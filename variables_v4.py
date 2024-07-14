@@ -71,7 +71,7 @@ def main():
         print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
         return
     except NoNbbosException:
-        print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
+        print(f"No NBBOs to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
         return
     
     except Exception as e:
@@ -81,11 +81,11 @@ def main():
     # Start timing the main calculations
     main_start_time = time.time()
 
-    #Customized Functions for calculating variables
+    #Customized Functions for computing variables
       
     def auction_conditions(df):
         pl_df = pl.from_pandas(df)
-        special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|M|6|9'))
+        special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|M|6|9'))     #these codes correspond to opening and closing prices 
         return special_conditions_df.select(['time', 'price', 'vol', 'EX', 'cond']).to_pandas()
 
     def calculate_minute_volatility(returns):
@@ -339,7 +339,7 @@ def main():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
             
             def encode_conditions_expr():
-                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKMNOPQSUVRY']), return_dtype=pl.Utf8)
+                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKMNOPQSUVRY']), return_dtype=pl.Utf8)  #codes for trading halts and reopenings
             
             aggregations = [
                 pl.col('price').last().alias(f'{df_name}_last_price'),
