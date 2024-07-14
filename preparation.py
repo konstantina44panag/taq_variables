@@ -24,7 +24,8 @@ def print_debug_info(df, name):
     print(df.head())
     print(df.columns)
     print(f"DataFrame shape: {df.shape}")
-
+    
+#def convert_float_to_datetime: Conversion of float timestamps to datetime object timestamps
 def convert_float_to_datetime(df, float_column, base_date):
     """Converts float time values to datetime objects based on a base date."""
     midnight = pd.to_datetime(base_date + " 00:00:00")
@@ -32,7 +33,10 @@ def convert_float_to_datetime(df, float_column, base_date):
     df["datetime"] = midnight + df["timedelta"]
     df.drop(columns=["timedelta"], inplace=True)
     return df
-
+    
+#def load_dataset: For loading the trades dataframe from the ctm files, the necessary columns for cleaning and variables are TIME_M, PRICE, SIZE, TR_CORR, SALE_COND, in some files the names change to TRCORR, TRCOND, 
+#so I identify the columns by the patterns CORR, COND
+#The data are loaded to the trades dataframe
 def load_dataset(
     hdf_file,
     dataset_path,
@@ -68,7 +72,10 @@ def load_dataset(
         raise ValueError(f"Dataset path not found: {dataset_path}")
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
-
+        
+#def load_dataset_with_exclusion: For loading the nbbo dataframe from the complete_nbbo files, the necessary columns for cleaning and variables are TIME_M, BEST_ASK, BEST_BID, BestAskShares, BestBidShares, QU_COND in some files the names change to QUOTE_COND 
+#so I identify the column by the pattern COND and excluding the pattern NBBO, since NBBO_COND is a different column than QU_COND
+#The data are loaded to the nbbos dataframe
 def load_dataset_with_exclusion(
     hdf_file,
     dataset_path,
@@ -102,7 +109,8 @@ def load_dataset_with_exclusion(
         raise ValueError(f"Dataset path not found: {dataset_path}")
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
-    
+        
+#def decode_byte_strings: The data in HDF5 files have the type byte strings, I decode the data to string type    
 def decode_byte_strings(df):
     """Decode byte strings in all columns of the dataframe."""
     for col in df.columns:
@@ -129,7 +137,7 @@ def decode_byte_strings(df):
 #    else:
 #        print("PRICE column not found in the DataFrame.")
 
-
+#def handle_duplicates: For cleaning data with the same timestamps, by using the median price and aggregating the volume
 def handle_duplicates(df, key_col, value_cols, sum_col=None, other_cols=None):
     """
     Handle duplicates using Polars by taking the median for the value columns, the sum for the sum_col,
@@ -157,14 +165,14 @@ def handle_duplicates(df, key_col, value_cols, sum_col=None, other_cols=None):
 
     return result_df
 
-
+#def identify_retail: For finding the retail trades from the trades dataframe
 def identify_retail(z):
             if 0 < z < 0.4 or 0.6 < z < 1:
                 return 'retail trade'
             else:
                 return 'non-retail trade'
 
-   
+#def calculate_returns_shift: For calculating returns 
 def calculate_returns_shift(df, price_col='price', time_col='time', additional_cols=[]):
  
     prices = df[price_col].values
@@ -184,6 +192,7 @@ def calculate_returns_shift(df, price_col='price', time_col='time', additional_c
 
     return returns_df
 
+#For computing the rolling median for the price value of a dataframe, in order to apply the cleaning step A2 in TAQ Cleaning Techniques
 @njit
 def rolling_median_exclude_self(series, window):
     medians = []
@@ -194,7 +203,8 @@ def rolling_median_exclude_self(series, window):
             window_data = np.delete(series[i - window // 2:i + window // 2 + 1], window // 2)
             medians.append(np.median(window_data))
     return np.array(medians)
-
+    
+#For computing the rolling absolute deviations from a rolling median for the price value of a dataframe, in order to apply the cleaning step A2 in TAQ Cleaning Techniques
 @njit
 def rolling_mad_exclude_self(series, window):
     mads = []
@@ -212,6 +222,7 @@ dummy_data = np.random.rand(100)
 _ = rolling_median_exclude_self(dummy_data, 5)
 _ = rolling_mad_exclude_self(dummy_data, 5)
 
+#def prepare_datasets: Contains the loading of data to dataframes and applies the appropriate operations
 def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path):
     try:
         load_start_time = time.time()
@@ -243,13 +254,14 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         load_end_time = time.time()
         load_time = load_end_time - load_start_time
 
+        #Applying decoding
         decode_start_time = time.time()
         trades = decode_byte_strings(trades)
         nbbos = decode_byte_strings(nbbos)
         decode_end_time = time.time()
 
         logging.info("Cleaning data")
-        #Formatting
+        #Applying formatting to trades
         #trades
         format_start_time = time.time()
         trades["TIME_M"] = np.array(trades["TIME_M"], dtype=np.float64)
@@ -267,7 +279,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         }, inplace=True)
 
         
-        #nbbo
+        #Applying formatting to nbbos
         nbbos["TIME_M"] = np.array(nbbos["TIME_M"], dtype=np.float64)
         nbbos = convert_float_to_datetime(nbbos, "TIME_M", base_date)
 
@@ -287,28 +299,35 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         #Data cleaning
         clean_only_start_time = time.time()
        
-        #Clean trades
+        #Data cleaning for trades
+        
+        #Remove nan or zero prices, P2 cleaning step in Taq Cleaning Techniques
         mask = (~np.isnan(trades['price'].values)) & (trades['price'].values != 0)
         trades = trades.loc[mask]
-        #switch to polars
+        
+        #switch to polars dataframe
         pl_trades = pl.from_pandas(trades)
 
+        #Check for empty dataframe after the cleaning step, otherwise an error will occur on next operations. If the trades are empty the program returns the message and calculations are skipped for this stock-day
         if pl_trades.height == 0:
             print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
 
+        #Cleaning step T1 
         x1 = time.time()  
         pl_trades = pl_trades.filter(pl_trades['corr'].is_in(['00', '01', '02']))
         end_x1 = time.time()
-
+        
+        #Check for empty dataframe after the cleaning step
         if pl_trades.height == 0:
             print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
-
+        #Cleaning step T2
         x2 = time.time()
         conditions_to_remove = "BGJKLOTWZ"
         pl_trades = pl_trades.filter(~pl_trades['cond'].str.contains(f"[{conditions_to_remove}]"))
 
+        #Check for empty dataframe after the cleaning step
         if pl_trades.height == 0:
             print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
@@ -316,7 +335,8 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         #switch to pandas
         trades = pl_trades.to_pandas()
         end_x2 = time.time()
-                   
+
+        #Cleaning step A2
         x3 = time.time()
         trades['rolling_median'] = rolling_median_exclude_self(trades['price'].values, 51)
         trades['rolling_mad'] = rolling_mad_exclude_self(trades['price'].values, 51)
@@ -324,61 +344,81 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trades = trades[~trades['exclude']]
         end_x3 = time.time()
 
+        #Check for empty dataframe after the cleaning step
         if trades.empty:
             print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
-        
+            
+        #Cleaning step T3
         x4 = time.time()
         trades = handle_duplicates(trades, key_col='datetime', value_cols=['price'], sum_col=['vol'], other_cols=['time', "corr", "cond", "EX"])
         end_x4 = time.time()
 
 
         #Clean nbbo
+
+        #Remove nan or zero quotes, cleaning step P2
         y1 = time.time()
         mask = (~np.isnan(nbbos['BEST_ASK'].values)) & (~np.isnan(nbbos['BEST_BID'].values)) & (nbbos['BEST_ASK'].values != 0) & (nbbos['BEST_BID'].values != 0)
         nbbos = nbbos.loc[mask]        
         #switch to polars
         pl_nbbos = pl.from_pandas(nbbos)
 
+        #Check for empty dataframe after the cleaning step
         if pl_nbbos.height == 0:
             print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
-        
+
+        #Cleaning Step Q2
         pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] >= pl_nbbos['BEST_BID'])
         end_y1 = time.time()
         if pl_nbbos.height == 0:
             print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
-        
+            
+        #Check for empty dataframe after the cleaning step
+        if pl_nbbos.height == 0:
+            print(f"No nbbos after cleaning techniques for {stock_name}")
+            raise NoNbbosException()
+
+        #Cleaning Step Q3
         y2 = time.time()
         pl_nbbos = pl_nbbos.with_columns((pl_nbbos['BEST_ASK'] - pl_nbbos['BEST_BID']).alias('spread'))
         med_spread = pl_nbbos['spread'].median()
         pl_nbbos = pl_nbbos.filter(pl_nbbos['spread'] <= 50 * med_spread)
         end_y2 = time.time()
+
+        #Check for empty dataframe after the cleaning step
         if pl_nbbos.height == 0:
             print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
-        
+            
+        #Create Midpoint
         pl_nbbos = pl_nbbos.with_columns(((pl_nbbos['BEST_BID'] + pl_nbbos['BEST_ASK']) / 2).alias('midpoint'))
         #switch to pandas
         nbbos = pl_nbbos.to_pandas()
 
+        #Cleaning Step Q4
         y3 = time.time()
         nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['exclude'] = np.abs(nbbos['midpoint'] - nbbos['rolling_median']) > 10 * nbbos['rolling_mad']
         nbbos = nbbos[~nbbos['exclude']]
         end_y3 = time.time()
+
+        #Check for empty dataframe after the cleaning step
         if nbbos.empty:
             print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
-        
+
+        #Cleaning Step Q1
         y4 = time.time()
         nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID', 'midpoint'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
         end_y4 = time.time()
         clean_only_end_time = time.time()
 
-        #Define the dataframes for variable calculations
+        #Define the appropriate dataframes for variable calculation
+        
         #Define the Ask and Bid
         Ask = nbbos[
             ["time", "datetime", "BEST_ASK", "Best_AskSizeShares", "qu_cond"]
@@ -465,9 +505,10 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Oddlot_trades = trades[(trades['time'] >= target_date) & (trades['cond'] == "I")].copy()
 
         specific_df_end_time = time.time()
+        
         #Define the Returns
         returns_start_time = time.time()
-
+        
         trade_returns = calculate_returns_shift(trades, price_col='price', time_col='time', additional_cols=['vol'])
         midprice_returns = calculate_returns_shift(Midpoint, price_col='price', time_col='time')
         
@@ -478,7 +519,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             ["time", "Initiator", "vol"]].copy()
         trade_signs.rename(columns={"Initiator": "returns"}, inplace=True)
     
-
+        #Wrie the time analysis
         with open("preparation_timeanalysis.txt", "a") as f:
             f.write(f"Stock: {stock_name}\n")
             f.write(f"Day: {base_date}\n")
