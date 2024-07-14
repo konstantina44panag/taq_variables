@@ -3,7 +3,8 @@ set -eu
 script_path="variables_v4.py"
 hdf5_base_path="/mnt/e/wrds23_hdf5/output"
 stocks=("IBM")
-exclude_stocks_file="/home/taq/taq_runs/current_program/exclude_stocks.txt"
+exclude_stocks_file="/home/taq/taq_variables/exclude_stocks.txt"
+
 # Read excluded stocks into an array
 exclude_stocks=()
 while IFS= read -r stock; do
