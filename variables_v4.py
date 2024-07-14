@@ -41,14 +41,14 @@ parser.add_argument(
 
 args, unknown = parser.parse_known_args()
 
-# Constructing file paths based on the arguments
-
 print(f"Output HDF5 file path: {args.hdf5_variable_path}")
 
 def main():
     global aggregated_data
     aggregated_data = {}
     aggregated_data_outside_trading = {}
+
+    #Import datasets from preparation.py
     try:
         result = prepare_datasets(
             args.hdf5_file_path,
@@ -82,12 +82,14 @@ def main():
     main_start_time = time.time()
 
     #Customized Functions for computing variables
-      
+
+    #Find Opne-Close prices
     def auction_conditions(df):
         pl_df = pl.from_pandas(df)
         special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|M|6|9'))     #these codes correspond to opening and closing prices 
         return special_conditions_df.select(['time', 'price', 'vol', 'EX', 'cond']).to_pandas()
 
+    #Calculate the variance
     def calculate_minute_volatility(returns):
         n = len(returns)
         if n <= 1:
@@ -95,6 +97,7 @@ def main():
         mean_return = returns.mean()
         return ((returns - mean_return) ** 2).sum() / (len(returns) - 1)
 
+    #Calculate the autocorrelation
     def calculate_autocorrelation(returns):
         n = len(returns)
         if n <= 1:
@@ -106,6 +109,7 @@ def main():
         covariance = ((returns - mean) * (returns.shift(1) - mean)).sum() / (n - 1)
         return covariance / variance
 
+    #Calculate the orderflow by Chordia, Hu, Subrahmanyam and Tong, MS 2019
     def calculate_voib_shr(df1, df2):
         if df1 is None or df1.empty or df1.isna().all().all() or df2 is None or df2.empty or df2.isna().all().all():
             return None
@@ -127,6 +131,7 @@ def main():
 
         return oib_shr_s
 
+    #Calculate the variance and autocorrelation of orderflow by Chordia, Hu, Subrahmanyam and Tong, MS 2019
     def apply_voib_shr_aggregations(df):
         if df is None or df.empty or df.isna().all().all():
             return None
@@ -140,7 +145,7 @@ def main():
         ])
         return resampled_df.to_pandas().set_index('time')
             
-          
+    #Calculate the variance and autocorrelation of returns      
     def apply_return_aggregations(pl_df, column='returns', df_name=''):
         if pl_df is None or pl_df.shape[0] == 0:
             return None
@@ -154,7 +159,7 @@ def main():
         ])
         return resampled_df.to_pandas().set_index('time')
         
-              
+    #Calculate the variance and autocorrelation of returns outside trading hours          
     def apply_return_aggregations_outside_trading(pl_df, column='returns',df_name=''):
         if pl_df is None or pl_df.shape[0] == 0:
             return None
@@ -168,7 +173,7 @@ def main():
         ])
         return resampled_df.to_pandas().set_index('time')
 
-    
+     #Calculate only the variance of returns
     def apply_ret_variances_aggregations(pl_df, column='returns'):
         if pl_df is None or pl_df.shape[0] == 0:
             return None
@@ -179,7 +184,7 @@ def main():
            
         return resampled_df.to_pandas().set_index('time')
     
-    
+    #Fill the minutes in the time column after the time bars are calculated for different dataframes and variables, so that entire time bar data can be merged in one dataframe
     def reindex_to_full_time(df, base_date, outside_trading=False):
         if df is None or df.empty or df.isna().all().all():
             return None
@@ -195,8 +200,9 @@ def main():
     
 
     # Aggregated Functions for Trades
-
+    #Variables for the trades dataframes, most of them are formed at the same time 
     def apply_aggregations(df, df_name):
+        #Check for empty dataframe or for dimension size 1 when there is no reason for creating minute bars
         if df is None or df.empty or df.isna().all().all():
             return None
         if len(df) == 1:
@@ -205,28 +211,37 @@ def main():
 
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
-        
+            
+        #Make sure the time column is a column and not an index
         df_filtered.reset_index(inplace = True)
+        
+        #Calculate durations of prices and weighted_price by these durations
         df_filtered['durations'] = df_filtered['time'].diff().fillna(pd.Timedelta(seconds=0)).dt.total_seconds()
         df_filtered['weighted_price'] = df_filtered['price'] * df_filtered['durations']
 
+        #Convert to polars
         pl_df = pl.from_pandas(df_filtered)
 
         try:
+            #Group the dataframe to 1-second intervals and count the events inside
             seconds_df = pl_df.group_by_dynamic('time', every='1s', label='left').agg([
                 pl.count('price').alias('count')
             ])
 
+            #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='1m', label='left').agg([
                 pl.col('count').max().alias(f'{df_name}_max_events_per_sec')
             ])
 
+            #Compute the VWAP
             def calculate_vwap_pl():
                 return (pl.col('price') * pl.col('vol')).sum() / pl.col('vol').sum()
-
+                
+            #Compute the TWAP
             def calculate_twap_pl():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
-    
+                
+            #Unite the different variables/aggregation methods, to be computed at the same time
             aggregations = [
                 pl.col('price').last().alias(f'{df_name}_last_price'),
                 pl.col('vol').last().alias(f'{df_name}_last_vol'),
@@ -239,17 +254,20 @@ def main():
                 pl.count('price').alias(f'{df_name}_num_events')
             ]
 
+            #Resample to one minute bars, using the aggregations above
             resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg(aggregations)
 
-
+            #Merge with the aggregation of maximum number of trades which was performed prior to the others
             resampled_df = resampled_df.join(max_trades_per_sec, on='time', how='inner')
+            
+            #Return the time bar variables, set the time as an index
             return resampled_df.to_pandas().set_index('time')
         
         except Exception as e:
             print(f"An error occurred: {e}")
             return None
    
-   
+   #Variables for the trades dataframes, almost the same operations as the def apply_aggregations, but this function is used for outside trading hours. Resampling in 30 minutes!
     def apply_aggregations_outside_trading(df, df_name, base_date):
         if df is None or df.empty or df.isna().all().all():
             return None
@@ -264,23 +282,29 @@ def main():
             return None
         
         df_filtered.reset_index(inplace = True)
+        
+        #Calculate durations of prices and weighted_price by these durations
         df_filtered['durations'] = df_filtered['time'].diff().fillna(pd.Timedelta(seconds=0)).dt.total_seconds()
         df_filtered['weighted_price'] = df_filtered['price'] * df_filtered['durations']
 
         pl_df = pl.from_pandas(df_filtered)
 
         try:
+            #Group the dataframe to 1-second intervals and count the events inside
             seconds_df = pl_df.group_by_dynamic('time', every='1s', label='left').agg([
                 pl.count('price').alias('count')
             ])
-
+            
+            #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='30m', label='left').agg([
                 pl.col('count').max().alias(f'{df_name}_max_events_per_sec')
             ])
 
+            #Compute the VWAP
             def calculate_vwap_pl():
                 return (pl.col('price') * pl.col('vol')).sum() / pl.col('vol').sum()
-            
+
+            #Compute the TWAP
             def calculate_twap_pl():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
             
@@ -318,26 +342,33 @@ def main():
             return None
         
         df_filtered.reset_index(inplace = True)
+
+        #Calculate durations of prices and weighted_price by these durations
         df_filtered['durations'] = df_filtered['time'].diff().fillna(pd.Timedelta(seconds=0)).dt.total_seconds()
         df_filtered['weighted_price'] = df_filtered['price'] * df_filtered['durations']
 
         pl_df = pl.from_pandas(df_filtered)
 
         try:
+            #Group the dataframe to 1-second intervals and count the events inside
             seconds_df = pl_df.group_by_dynamic('time', every='1s', label='left').agg([
                 pl.count('price').alias('count')
             ])
 
+            #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='1m', label='left').agg([
                 pl.col('count').max().alias(f'{df_name}_max_events_per_sec')
             ])
 
+            #Compute the VWAP
             def calculate_vwap_pl():
                 return (pl.col('price') * pl.col('vol')).sum() / pl.col('vol').sum()
-            
+
+            #Compute the TWAP
             def calculate_twap_pl():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
-            
+                
+            #Find the trading halts, or news event indicator
             def encode_conditions_expr():
                 return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKMNOPQSUVRY']), return_dtype=pl.Utf8)  #codes for trading halts and reopenings
             
@@ -376,26 +407,33 @@ def main():
             return None
         
         df_filtered.reset_index(inplace = True)
+        
+        #Calculate durations of prices and weighted_price by these durations
         df_filtered['durations'] = df_filtered['time'].diff().fillna(pd.Timedelta(seconds=0)).dt.total_seconds()
         df_filtered['weighted_price'] = df_filtered['price'] * df_filtered['durations']
 
         pl_df = pl.from_pandas(df_filtered)
 
         try:
+            #Group the dataframe to 1-second intervals and count the events inside
             seconds_df = pl_df.group_by_dynamic('time', every='1s', label='left').agg([
                 pl.count('price').alias('count')
             ])
 
+            #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='30m', label='left').agg([
                 pl.col('count').max().alias(f'{df_name}_max_events_per_sec')
             ])
 
+            #Compute the VWAP
             def calculate_vwap_pl():
                 return (pl.col('price') * pl.col('vol')).sum() / pl.col('vol').sum()
-            
+
+            #Compute the TWAP
             def calculate_twap_pl():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
-            
+
+            #Find the trading halts, or news event indicator
             def encode_conditions_expr():
                 return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKMNOPQSUVRY']), return_dtype=pl.Utf8)
             
@@ -439,22 +477,23 @@ def main():
         pl_df = pl.from_pandas(df_filtered.reset_index())
 
         try:
+            #Group the dataframe to 1-second intervals and count the events inside
             seconds_df = pl_df.group_by_dynamic('time', every='1s', label='left').agg([
                 pl.count('price').alias('count')
             ])
 
+            #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='1m', label='left').agg([
                 pl.col('count').max().alias(f'midprice_max_events_per_sec')
             ])
+
+            #Count the number of events
             aggregations = [
                 pl.count('price').alias(f'midprice_num_events'),
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg(aggregations)
-
             resampled_df = resampled_df.join(max_trades_per_sec, on='time', how='inner')
-
-
             return resampled_df.to_pandas().set_index('time')
         
         except Exception as e:
@@ -481,23 +520,23 @@ def main():
         pl_df = pl.from_pandas(df_filtered.reset_index())
 
         try:
+            #Group the dataframe to 1-second intervals and count the events inside
             seconds_df = pl_df.group_by_dynamic('time', every='1s', label='left').agg([
                 pl.count('price').alias('count')
             ])
 
+            #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='30m', label='left').agg([
                 pl.col('count').max().alias(f'midprice_max_events_per_sec')
             ])
+
+            #Count the number of events
             aggregations = [
                 pl.count('price').alias(f'midprice_num_events'),
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left', label='left').agg(aggregations)
-
-
             resampled_df = resampled_df.join(max_trades_per_sec, on='time', how='inner')
-
-
             return resampled_df.to_pandas().set_index('time')
         
         except Exception as e:
@@ -513,23 +552,28 @@ def main():
 
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
-        
+
+        #Filter for the appropriate hours
         if outside_trading:
             start_time_morning = f"{base_date} 09:30"
             end_time_afternoon = f"{base_date} 16:00"
             df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
         else:
             df_filtered = df.between_time("09:29", "16:00").copy()
-        
+            
+        #Check for an empty filtered dataframe
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
-
+            
+        #Reset the time column from index and convert to polars
         df_filtered = df_filtered.reset_index()
         pl_df = pl.from_pandas(df_filtered)
 
+        #Compute the Volume Weighted Return to be used for second bars
         def calculate_vwapr_expr():
             return (pl.col('returns') * pl.col('vol')).sum() / pl.col('vol').sum()
 
+        #Compute the mean Return to be used for second bars, as an alternative for the Volume Weighted Return, e.g. for the midpoint returns where the volume column is not defined 
         def calculate_mean_return_expr():
             return pl.col('returns').mean()
 
@@ -539,26 +583,33 @@ def main():
             calculate_mean_return_expr().alias('returns')
         ]
 
+        #Resample on the interval, which is an input argument of the function
         resampled_df = pl_df.group_by_dynamic('time', every=interval, closed='left').agg(aggregations)
 
         if resampled_df.is_empty():
             return None
-
+            
+        #Get reid of the first nan "return"
         if not outside_trading:
             resampled_df = resampled_df.filter(
                 (pl.col('time') >= pd.to_datetime(f"{base_date} 09:30")) & 
                 (pl.col('time') <= pd.to_datetime(f"{base_date} 16:00"))
             )
+
+        #since the volume has been used for the weighting, it is now dropped from the dataframe
         if 'vol' in resampled_df.columns:
             resampled_df = resampled_df.drop('vol')
         return resampled_df
 
 
     # Processing Trades
+
+    #Apply the function for open /close prices
     start_auction_time = time.time()
     auction_conditions_df = auction_conditions(trades)
     end_auction_time = time.time()
 
+    #For every trade dataframe, apply the function apply_aggregations from above
     start_process_trades_time = time.time()
     trade_dataframes_to_process = {
         "trades": trades,
@@ -602,6 +653,8 @@ def main():
     end_process_trades_time = time.time()
 
     #Extra variables for trades
+    
+    #The orderflow calculation is performed seperately
     start_process_ΟΙΒ_trades_time = time.time()
     print(f"Processing OIB statistics")
 
@@ -618,7 +671,7 @@ def main():
     
     end_process_ΟΙΒ_trades_time = time.time()
 
-    #Herfindahl Index
+    #Herfindahl Index is performed seperately
     start_process_herfindahl_time = time.time()
     print(f"Processing Herfindahl Index")
     def calculate_hindex(df, name):
@@ -637,7 +690,6 @@ def main():
             pl.col('value').sum().alias('sum_of_values'),
             (pl.col('value')**2).sum().alias('sum_of_squared_values')
         ])
-        
         
         minutely_data = resampled.group_by_dynamic('time', every='1m').agg([
             pl.col('sum_of_values').sum(),
@@ -660,13 +712,15 @@ def main():
         
         aggregated_data[f"hindex_{name}"] = reindex_to_full_time(minutely_data.to_pandas().set_index('time'), args.base_date)
 
+
+    #Apply the Herfindahl Index for these dataframes
     for df, name in zip([trades, Buys_trades, Sells_trades, Retail_trades, Oddlot_trades, Ask, Bid], 
                         ["trades", "Buys_trades", "Sells_trades", "Retail_trades", "Oddlot_trades", "Ask", "Bid"]):
         calculate_hindex(df, name)
        
     end_process_herfindahl_time = time.time()
 
-    #Processing Midpoint
+    #Processing Midpoint, apply the function apply_midpoint_aggregations from above
     start_process_midpoint_time = time.time()
 
     if not Midpoint.empty:
@@ -698,7 +752,7 @@ def main():
 
     end_process_midpoint_time = time.time()
 
-    #Processing Quotes
+    #Processing Quotes, apply the function apply_quote_aggregations from above
     start_process_quotes_time = time.time()
     quote_dataframes_to_process = {
         "Ask": Ask,
@@ -744,6 +798,7 @@ def main():
     print(f"Processing Returns")
     start_process_returns_time = time.time()
 
+    #Create one second returns for the trade_returns (from trade prices),  for the midprice_returns (from quote midpoint), for the trade_signs and the nbbo_signs for inside and outside trading hours
     trade_returns_1s = process_resample_data(trade_returns, '1s', args.base_date)    
     midprice_returns_1s = process_resample_data(midprice_returns, '1s', args.base_date)
     trade_returns_1s_outside_trading = process_resample_data(trade_returns, '1s', args.base_date, outside_trading=True)
@@ -753,6 +808,7 @@ def main():
     nbbo_signs_1s_outside_trading = process_resample_data(nbbo_signs, '1s', args.base_date, outside_trading=True)
     trade_signs_1s_outside_trading = process_resample_data(trade_signs, '1s', args.base_date, outside_trading=True)
 
+    #Create one minute timebars with statistics of the one second returns, such as variance and autocorrelation, for inside and outside trading hours
     aggregated_data["trade_returns"] = reindex_to_full_time(apply_return_aggregations(trade_returns_1s, column='returns', df_name='trade_ret'), args.base_date)
     aggregated_data["midprice_returns"] = reindex_to_full_time(apply_return_aggregations(midprice_returns_1s, column='returns', df_name='midprice_ret'),  args.base_date)
     aggregated_data["nbbo_sign_stat"] = reindex_to_full_time(apply_return_aggregations(nbbo_signs_1s, column='returns', df_name='nbbo_sign'),  args.base_date)
@@ -771,17 +827,20 @@ def main():
             returns_df_1s = midprice_returns_1s
         else:
             returns_df_1s = trade_returns_1s
-
+            
+        #Create 5-seccond and 15-second returns
         log_returns_5s = process_resample_data(returns_df, '5s', args.base_date)
         log_returns_15s = process_resample_data(returns_df, '15s', args.base_date)
 
+        #Compute variances in minute bars on the second-returns
         ratios_1 = pd.DataFrame()
         ratios_1 = apply_ret_variances_aggregations(returns_df_1s)
         ratios_5 = pd.DataFrame()
         ratios_5 = apply_ret_variances_aggregations(log_returns_5s)
         ratios_15 = pd.DataFrame()
         ratios_15 = apply_ret_variances_aggregations(log_returns_15s)
-    
+
+        #Name the variance columns
         if (ratios_1 is not None and not ratios_1.empty) or (ratios_5 is not None and not ratios_5.empty) or (ratios_15 is not None and not ratios_15.empty):
             if ratios_1 is not None and not ratios_1.empty:
                 ratios_1.rename(columns={"variance": "variance_1s"}, inplace=True)
@@ -790,14 +849,17 @@ def main():
             if ratios_15 is not None and not ratios_15.empty:
                 ratios_15.rename(columns={"variance": "variance_15s"}, inplace=True)
 
-            # Merge the two DataFrames on the time index
+            # Merge the two variances on the time index and find the two variance ratios
             if ratios_5 is not None and not ratios_5.empty and ratios_15 is not None and not ratios_15.empty:
                 variance_ratio_df = pd.merge(ratios_5, ratios_15, left_index=True, right_index=True)
+                
+                #For variance ratio 1 the variances of 5 second and 15 second returns are divided
                 variance_ratio_df['variance_ratio'] = np.abs((variance_ratio_df['variance_15s'] / (3 * variance_ratio_df['variance_5s'])) - 1)
                 if ratios_1 is not None and not ratios_1.empty: 
                     variance_ratio_df = pd.merge(variance_ratio_df, ratios_1, left_index=True, right_index=True)
+                    
+                    #For variance ratio 1 the variances of 1 second and 5 second returns are divided
                     variance_ratio_df['variance_ratio2'] = np.abs((variance_ratio_df['variance_5s'] / (5 * variance_ratio_df['variance_1s'])) - 1)
-
                 if returns_df is trade_returns:
                     aggregated_data["trade_returns_variance_ratio1"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
                     print(f"Variance ratio 1 was calculated for trade/price returns")
@@ -818,9 +880,12 @@ def main():
             print(f"Cammot compute variance ratios for since there is only one second-return for that day")
     end_process_vr_returns_time = time.time()
 
+    #All variables have been saved to aggregated_data list
     
     #End calculation time
     main_end_time = time.time()
+
+    #Structure of the list
     #    print("Structure of aggregated_data:")
     #    for name, df in aggregated_data.items():
     #        print(f"DataFrame name: {name}")
@@ -833,27 +898,31 @@ def main():
     write_start_time = time.time()
     
 
-    # Function to reindex DataFrames to the full time index
+    # Function to merge dataframes on time index
     def merge_dataframes(df1, df2):
         return pd.merge(df1, df2, left_index=True, right_index=True, how='outer')
     
     consolidated_df = pd.DataFrame()
+    
+    #Create a single dataframe 'consolidated_df' for all names and dataframes in the aggregated_data list
     for name, df in aggregated_data.items():
         if df is not None and not df.isna().all().all():
             consolidated_df = merge_dataframes(consolidated_df, df) if not consolidated_df.empty else df
 
+    #Create a single dataframe 'consolidated_df_outside_trading' for all names and dataframes in the aggregated_data list
     consolidated_df_outside_trading = pd.DataFrame()
     for name, df in aggregated_data_outside_trading.items():
         if df is not None and not df.isna().all().all():
             consolidated_df_outside_trading = merge_dataframes(consolidated_df_outside_trading, df) if not consolidated_df_outside_trading.empty else df
 
+    #Reset the time index to be the time column of the variable dataset
     consolidated_df.reset_index(inplace=True)
     consolidated_df.rename(columns={'index': 'time'}, inplace=True)
 
     consolidated_df_outside_trading.reset_index(inplace=True)
     consolidated_df_outside_trading.rename(columns={'index': 'time'}, inplace=True)
 
-
+    #Function for saving the variable datasets in a new HDF5 file
     def process_and_save_df(df, hdf5_variable_path, stock_name, day, month, year, time_range_name):
         if not df.empty:
             # Convert object columns to string
@@ -886,11 +955,13 @@ def main():
             except IOError as e:
                 print(f"An error occurred while writing to the file: {e}")
 
+    #Save the variables inside trading hours in the key time_bars for that stock and that day
     if consolidated_df is not None and not consolidated_df.empty:
         process_and_save_df(consolidated_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "time_bars")
     else:
         print("Consolidated DataFrame is empty or None. Skipping save.")
 
+    #Save the variables outside trading hours in the key outside_trading_time_bars for that stock and that day
     if consolidated_df_outside_trading is not None and not consolidated_df_outside_trading.empty:
         process_and_save_df(consolidated_df_outside_trading, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "outside_trading_time_bars")
     else:
@@ -903,6 +974,7 @@ def main():
 
     write_end_time = time.time()
 
+    #Write the time analysis to a text file
     with open("variables_time.txt", "a") as f:
         f.write(f"Stock: {args.stock_name}\n")
         f.write(f"Day: {args.day}\n")
