@@ -17,7 +17,7 @@ for year in {2014..2014}; do
         formatted_month=$(printf "%02d" $month)
         hdf5_file_path="${hdf5_base_path}/${year}${formatted_month}.h5"
         contents_file="contents_${year}${formatted_month}.txt"
-        hdf5_variable_path="/home/taq/taq_runs/current_program/${year}${month}_IBM_variables.h5"
+        hdf5_variable_path="${year}${month}_IBM_variables.h5"
         
         if [ -f "$hdf5_file_path" ]; then
             if [ ! -f "$contents_file" ]; then
