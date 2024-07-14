@@ -314,16 +314,14 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             raise NoTradesException()
 
         #Cleaning step T1 
-        x1 = time.time()  
         pl_trades = pl_trades.filter(pl_trades['corr'].is_in(['00', '01', '02']))
-        end_x1 = time.time()
         
         #Check for empty dataframe after the cleaning step
         if pl_trades.height == 0:
             print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
+            
         #Cleaning step T2
-        x2 = time.time()
         conditions_to_remove = "BGJKLOTWZ"
         pl_trades = pl_trades.filter(~pl_trades['cond'].str.contains(f"[{conditions_to_remove}]"))
 
@@ -334,59 +332,49 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         
         #switch to pandas
         trades = pl_trades.to_pandas()
-        end_x2 = time.time()
 
-        #Cleaning step A2
-        x3 = time.time()
+        #Cleaning step T3
+        trades = handle_duplicates(trades, key_col='datetime', value_cols=['price'], sum_col=['vol'], other_cols=['time', "corr", "cond", "EX"])
+
+        #Cleaning step A2, substitutes T4
         trades['rolling_median'] = rolling_median_exclude_self(trades['price'].values, 51)
         trades['rolling_mad'] = rolling_mad_exclude_self(trades['price'].values, 51)
         trades['exclude'] = np.abs(trades['price'] - trades['rolling_median']) > 10 * trades['rolling_mad']
         trades = trades[~trades['exclude']]
-        end_x3 = time.time()
 
         #Check for empty dataframe after the cleaning step
         if trades.empty:
             print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
-            
-        #Cleaning step T3
-        x4 = time.time()
-        trades = handle_duplicates(trades, key_col='datetime', value_cols=['price'], sum_col=['vol'], other_cols=['time', "corr", "cond", "EX"])
-        end_x4 = time.time()
 
-
+        
         #Clean nbbo
 
         #Remove nan or zero quotes, cleaning step P2
-        y1 = time.time()
         mask = (~np.isnan(nbbos['BEST_ASK'].values)) & (~np.isnan(nbbos['BEST_BID'].values)) & (nbbos['BEST_ASK'].values != 0) & (nbbos['BEST_BID'].values != 0)
         nbbos = nbbos.loc[mask]        
         #switch to polars
         pl_nbbos = pl.from_pandas(nbbos)
-
+        
         #Check for empty dataframe after the cleaning step
         if pl_nbbos.height == 0:
             print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
+        
+        #Cleaning Step Q1
+        nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID', 'midpoint'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
 
         #Cleaning Step Q2
         pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] >= pl_nbbos['BEST_BID'])
-        end_y1 = time.time()
-        if pl_nbbos.height == 0:
-            print(f"No nbbos after cleaning techniques for {stock_name}")
-            raise NoNbbosException()
-            
-        #Check for empty dataframe after the cleaning step
+        
         if pl_nbbos.height == 0:
             print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
 
         #Cleaning Step Q3
-        y2 = time.time()
         pl_nbbos = pl_nbbos.with_columns((pl_nbbos['BEST_ASK'] - pl_nbbos['BEST_BID']).alias('spread'))
         med_spread = pl_nbbos['spread'].median()
         pl_nbbos = pl_nbbos.filter(pl_nbbos['spread'] <= 50 * med_spread)
-        end_y2 = time.time()
 
         #Check for empty dataframe after the cleaning step
         if pl_nbbos.height == 0:
@@ -399,24 +387,18 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         nbbos = pl_nbbos.to_pandas()
 
         #Cleaning Step Q4
-        y3 = time.time()
         nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['exclude'] = np.abs(nbbos['midpoint'] - nbbos['rolling_median']) > 10 * nbbos['rolling_mad']
         nbbos = nbbos[~nbbos['exclude']]
-        end_y3 = time.time()
-
+        
         #Check for empty dataframe after the cleaning step
         if nbbos.empty:
             print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
 
-        #Cleaning Step Q1
-        y4 = time.time()
-        nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID', 'midpoint'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
-        end_y4 = time.time()
         clean_only_end_time = time.time()
-
+        
         #Define the appropriate dataframes for variable calculation
         
         #Define the Ask and Bid
@@ -487,8 +469,10 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Ask.rename(columns={"datetime": "time"}, inplace=True)
         Bid.drop(columns=["time"], inplace=True)
         Bid.rename(columns={"datetime": "time"}, inplace=True)
+
         
         #Define the Buys_trades and Sell_trades
+        
         specific_df_start_time = time.time()
 
         Buys_trades = tradessigns[tradessigns["Initiator"] == 1].copy()
@@ -527,14 +511,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             f.write(f"decode time: {decode_end_time - decode_start_time} seconds\n")
             f.write(f"format time: {format_end_time - format_start_time} seconds\n")
             f.write(f"Clean time: {clean_only_end_time - clean_only_start_time} seconds\n")
-            f.write(f"x1 time: {end_x1 - x1} seconds\n")
-            f.write(f"x2 time: {end_x2 - x2} seconds\n")
-            f.write(f"x3 time: {end_x3 - x3} seconds\n")
-            f.write(f"x4 time: {end_x4 - x4} seconds\n")
-            f.write(f"y1 time: {end_y1 - y1} seconds\n")
-            f.write(f"y2 time: {end_y2 - y2} seconds\n")
-            f.write(f"y3 time: {end_y3 - y3} seconds\n")
-            f.write(f"y4 time: {end_y4 - y4} seconds\n")
             f.write(f"nbbo sign time: {nbbo_end_time - nbbo_start_time} seconds\n")
             f.write(f"buys_sells time: {specific_df_end_time - specific_df_start_time} seconds\n")
             f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
