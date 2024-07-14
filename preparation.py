@@ -222,7 +222,7 @@ dummy_data = np.random.rand(100)
 _ = rolling_median_exclude_self(dummy_data, 5)
 _ = rolling_mad_exclude_self(dummy_data, 5)
 
-#def prepare_datasets: Contains the loading of data to dataframes and applies the appropriate operations
+#def prepare_datasets: Contains the loading of data to dataframes and applies the appropriate operations, this function is called by the python script variables_v4.py which then calculates variables
 def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path):
     try:
         load_start_time = time.time()
@@ -261,8 +261,8 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         decode_end_time = time.time()
 
         logging.info("Cleaning data")
+        
         #Applying formatting to trades
-        #trades
         format_start_time = time.time()
         trades["TIME_M"] = np.array(trades["TIME_M"], dtype=np.float64)
         trades = convert_float_to_datetime(trades, "TIME_M", base_date) 
@@ -300,7 +300,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         clean_only_start_time = time.time()
        
         #Data cleaning for trades
-        
         #Remove nan or zero prices, P2 cleaning step in Taq Cleaning Techniques
         mask = (~np.isnan(trades['price'].values)) & (trades['price'].values != 0)
         trades = trades.loc[mask]
@@ -348,8 +347,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             raise NoTradesException()
 
         
-        #Clean nbbo
-
+        #Cleaning nbbos
         #Remove nan or zero quotes, cleaning step P2
         mask = (~np.isnan(nbbos['BEST_ASK'].values)) & (~np.isnan(nbbos['BEST_BID'].values)) & (nbbos['BEST_ASK'].values != 0) & (nbbos['BEST_BID'].values != 0)
         nbbos = nbbos.loc[mask]        
@@ -398,9 +396,9 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             raise NoNbbosException()
 
         clean_only_end_time = time.time()
+
         
         #Define the appropriate dataframes for variable calculation
-        
         #Define the Ask and Bid
         Ask = nbbos[
             ["time", "datetime", "BEST_ASK", "Best_AskSizeShares", "qu_cond"]
@@ -446,7 +444,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Bid['value'] = Bid['price'] * Bid['vol']
 
         #Trade Signs estimation
-
         trsigns_start_time = time.time()
         logging.info("Estimating trade signs")
         analyzer = TradeAnalyzer(trades, Ask, Bid)
@@ -471,39 +468,36 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Bid.rename(columns={"datetime": "time"}, inplace=True)
 
         
-        #Define the Buys_trades and Sell_trades
-        
+        #Define trade specific dataframes
         specific_df_start_time = time.time()
-
+        
+        #Define the Buys_trades and Sell_trades dataframes
         Buys_trades = tradessigns[tradessigns["Initiator"] == 1].copy()
         Sells_trades = tradessigns[tradessigns["Initiator"] == -1].copy()
         
-        #Define the Retail_trades
+        #Define the Retail_trades dataframe
         Retail_trades = trades.loc[trades["EX"] == "D"].copy()
         Retail_trades['Z'] = 100 * (Retail_trades['price'] % 0.01)        
         Retail_trades['trade_type'] = Retail_trades['Z'].apply(identify_retail)
         Retail_trades = Retail_trades[Retail_trades['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
 
-        #Define the Oddlot_trades
+        #Define the Oddlot_trades dataframe
         target_date = datetime(2014, 1, 1)
         Oddlot_trades = trades[(trades['time'] >= target_date) & (trades['cond'] == "I")].copy()
-
         specific_df_end_time = time.time()
         
-        #Define the Returns
+        #Define the Returns dataframe
         returns_start_time = time.time()
-        
         trade_returns = calculate_returns_shift(trades, price_col='price', time_col='time', additional_cols=['vol'])
         midprice_returns = calculate_returns_shift(Midpoint, price_col='price', time_col='time')
-        
         returns_end_time = time.time()
 
-        #Define the trade_signs
+        #Define the trade_signs dataframe
         trade_signs = tradessigns[
             ["time", "Initiator", "vol"]].copy()
         trade_signs.rename(columns={"Initiator": "returns"}, inplace=True)
     
-        #Wrie the time analysis
+        #Write the time analysis
         with open("preparation_timeanalysis.txt", "a") as f:
             f.write(f"Stock: {stock_name}\n")
             f.write(f"Day: {base_date}\n")
