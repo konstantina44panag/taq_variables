@@ -876,7 +876,7 @@ def main():
                 print(f"Data successfully saved to HDF5 key: {hdf5_key}")
         else:
             print("No DataFrames to merge. Skipping HDF5 save step.")
-            empty_bars_file_path = "/home/taq/taq_variables/empty_time_bars.txt"
+            empty_bars_file_path = "empty_time_bars.txt"
             message = f"{stock_name} has empty time bars for {day}/{month}/{year}."
             
             try:
