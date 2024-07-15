@@ -17,7 +17,7 @@ stocks=("$@")
 # Determine the base path and other paths based on the path_type argument
 if [ "$path_type" == "ATOM" ]; then
     hdf5_file_path="/mnt/e/wrds23_hdf5/output/${year}${month}.h5"
-    hdf5_variable_path="${year}${month}_variables.h5"
+    hdf5_variable_path="first_test_${year}${month}_variables.h5"
     script_path="variables_v4.py"
     exclude_stocks_file="exclude_stocks.txt"
     contents_file="contents_${year}${month}.txt"
@@ -27,7 +27,7 @@ if [ "$path_type" == "ATOM" ]; then
     prof_analysis_path="first_test_profiling_analysis.txt"
 elif [ "$path_type" == "HPC" ]; then
     hdf5_file_path="/work/pa24/kpanag/output/${year}${month}.h5"
-    hdf5_variable_path="/work/pa24/kpanag/variables/${year}${month}_variables.h5"
+    hdf5_variable_path="/work/pa24/kpanag/variables/first_test_${year}${month}_variables.h5"
     script_path="/work/pa24/kpanag/develop_scripts/variables_v4.py"
     exclude_stocks_file="/work/pa24/kpanag/develop_scripts/exclude_stocks.txt"
     contents_file="/work/pa24/kpanag/hdf_check_byname/hdf_contents/hdf_files_${year}${month}"
