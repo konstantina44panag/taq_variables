@@ -80,7 +80,7 @@ if [ -f "$hdf5_file_path" ]; then
             ctm_dataset_path="/${stock}/day${day}/ctm/table"
             complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/table"
             echo "Executing: $script_path for $hdf5_file_path $date_str"
-            python3.11 $script_path $hdf5_file_path $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5_variable_path
+            python3.11 $script_path $hdf5_file_path $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5_variable_path $prep_analysis_path $emp_analysis_path $var_analysis_path $prof_analysis_path
             echo "Executed for: $date_str, Stock: $stock, Year: $year, Month: $month, Day: $day, HDF5: $hdf5_file_path"
         done
     done
