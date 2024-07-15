@@ -314,6 +314,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
 
         #Cleaning step T1 
         pl_trades = pl_trades.filter(pl_trades['corr'].is_in(['00', '01', '02']))
+        #pl_trades = pl_trades.filter(~pl_trades['cond'].is_in(['B', 'G', 'J', 'K', 'L', 'T', 'W', 'Z']))
         
         #Check for empty dataframe after the cleaning step
         if pl_trades.height == 0:
@@ -321,7 +322,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             raise NoTradesException()
             
         #Cleaning step T2
-        conditions_to_remove = "BGJKLOTWZ"
+        conditions_to_remove = "BGJKLTWZ"
         pl_trades = pl_trades.filter(~pl_trades['cond'].str.contains(f"[{conditions_to_remove}]"))
 
         #Check for empty dataframe after the cleaning step
@@ -451,7 +452,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trsigns_end_time = time.time()
         trsigns_time = trsigns_end_time - trsigns_start_time
 
-        logging.info("More preparation")
         trades.sort_values(by="datetime", inplace=True)
         tradessigns.sort_values(by='datetime', inplace=True)
         Ask.sort_values(by="datetime", inplace=True)
