@@ -9,6 +9,7 @@ import traceback
 from datetime import datetime
 import polars as pl
 from numba import njit
+pd.set_option('display.max_rows', 100)
 
 # Configure logging
 logging.basicConfig(
@@ -18,13 +19,15 @@ class NoTradesException(Exception):
     pass
 class NoNbbosException(Exception):
     pass
+
+
 # Function definitions
 def print_debug_info(df, name):
     print(f"\n{name}")
     print(df.head())
     print(df.columns)
     print(f"DataFrame shape: {df.shape}")
-    
+
 #def convert_float_to_datetime: Conversion of float timestamps to datetime object timestamps
 def convert_float_to_datetime(df, float_column, base_date):
     """Converts float time values to datetime objects based on a base date."""
@@ -120,35 +123,21 @@ def decode_byte_strings(df):
             )
     return df
 
-#def check_price_column_for_more_than_17_chars(df):
-#    """Check if any value in the PRICE column has more than 16 characters."""
-#    if "PRICE" in df.columns:
-#        price_col = df["PRICE"].to_numpy()
-#
-#        lengths = np.vectorize(len)(price_col)
-#        
-#        if np.any(lengths > 17):
-#            print("Values in the PRICE column with more than 16 characters:")
-#            values_with_more_than_16_chars = price_col[lengths > 16]
-#            for value in values_with_more_than_16_chars:
-#                print(value)
-#        else:
-#            print("No value in the PRICE column has more than 16 characters.")
-#    else:
-#        print("PRICE column not found in the DataFrame.")
 
 #def handle_duplicates: For cleaning data with the same timestamps, by using the median price and aggregating the volume
-def handle_duplicates(df, key_col, value_cols, sum_col=None, other_cols=None):
+def handle_duplicates(pl_df, key_col, value_cols, sum_col=None, other_cols=None, join_col=None):
     """
     Handle duplicates using Polars by taking the median for the value columns, the sum for the sum_col,
     and the last value for other columns. If other_cols is not provided, only the value_cols and sum_col 
     will be aggregated.
 
     """
-    if df.shape[0] < 2:
-        return df
-    
-    pl_df = pl.from_pandas(df)
+    if pl_df.shape[0] < 2:
+        return pl_df
+
+    duplicates_mask = pl_df.with_columns(pl.col(key_col).is_duplicated().alias("is_duplicated"))
+    duplicates = duplicates_mask.filter(pl.col("is_duplicated")).drop("is_duplicated")
+    non_duplicates = duplicates_mask.filter(~pl.col("is_duplicated")).drop("is_duplicated")
 
     agg_exprs = [pl.col(col).median().alias(col) for col in value_cols]
     
@@ -157,12 +146,12 @@ def handle_duplicates(df, key_col, value_cols, sum_col=None, other_cols=None):
         
     if other_cols:
         agg_exprs.extend([pl.col(col).last().alias(col) for col in other_cols])
-    
-    result = pl_df.group_by(key_col).agg(agg_exprs)
-
-    result_df = result.to_pandas().reset_index()
-    result_df = result_df.sort_values(by=key_col).reset_index(drop=True)
-
+    if join_col:
+        agg_exprs.extend([pl.col(col).str.concat(",") for col in join_col])
+   
+    aggregated_duplicates = duplicates.group_by(key_col).agg(agg_exprs).sort(key_col)
+    aggregated_duplicates = aggregated_duplicates.select(non_duplicates.columns)
+    result_df = pl.concat([non_duplicates, aggregated_duplicates]).sort(key_col)
     return result_df
 
 #def identify_retail: For finding the retail trades from the trades dataframe
@@ -194,29 +183,33 @@ def calculate_returns_shift(df, price_col='price', time_col='time', additional_c
 
 #For computing the rolling median for the price value of a dataframe, in order to apply the cleaning step A2 in TAQ Cleaning Techniques
 @njit
-def rolling_median_exclude_self(series, window):
-    medians = []
-    for i in range(len(series)):
-        if i < window // 2 or i >= len(series) - window // 2:
-            medians.append(np.nan)
-        else:
-            window_data = np.delete(series[i - window // 2:i + window // 2 + 1], window // 2)
-            medians.append(np.median(window_data))
-    return np.array(medians)
+def rolling_median_exclude_self(a, W):
+    half_window = W // 2
+    medians = np.full(a.size, np.nan)
     
-#For computing the rolling absolute deviations from a rolling median for the price value of a dataframe, in order to apply the cleaning step A2 in TAQ Cleaning Techniques
+    for i in range(half_window, len(a) - half_window):
+        if i < half_window or i >= len(a) - half_window:
+            continue
+        window_data = np.concatenate((a[i - half_window:i], a[i + 1:i + half_window + 1]))
+        medians[i] = np.median(window_data)
+
+    return medians
+
+#For computing the rolling mad for the price value of a dataframe, in order to apply the cleaning step A2 in TAQ Cleaning Techniques
 @njit
-def rolling_mad_exclude_self(series, window):
-    mads = []
-    for i in range(len(series)):
-        if i < window // 2 or i >= len(series) - window // 2:
-            mads.append(np.nan)
-        else:
-            window_data = np.delete(series[i - window // 2:i + window // 2 + 1], window // 2)
-            median = np.median(window_data)
-            mad = np.mean(np.abs(window_data - median))
-            mads.append(mad)
-    return np.array(mads)
+def rolling_mad_exclude_self(a, W):
+    half_window = W // 2
+    mads = np.full(a.size, np.nan)
+    
+    for i in range(half_window, len(a) - half_window):
+        if i < half_window or i >= len(a) - half_window:
+            continue
+        window_data = np.concatenate((a[i - half_window:i], a[i + 1:i + half_window + 1]))
+        median = np.median(window_data)
+        mad = np.mean(np.abs(window_data - median))
+        mads[i] = mad
+    
+    return mads
 
 dummy_data = np.random.rand(100)
 _ = rolling_median_exclude_self(dummy_data, 5)
@@ -278,7 +271,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             "SIZE": "vol"
         }, inplace=True)
 
-        
         #Applying formatting to nbbos
         nbbos["TIME_M"] = np.array(nbbos["TIME_M"], dtype=np.float64)
         nbbos = convert_float_to_datetime(nbbos, "TIME_M", base_date)
@@ -296,14 +288,13 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         
         format_end_time = time.time()
 
-        #Data cleaning
+        #Data cleaning for trades
         clean_only_start_time = time.time()
        
-        #Data cleaning for trades
         #Remove nan or zero prices, P2 cleaning step in Taq Cleaning Techniques
         mask = (~np.isnan(trades['price'].values)) & (trades['price'].values != 0)
         trades = trades.loc[mask]
-        
+
         #switch to polars dataframe
         pl_trades = pl.from_pandas(trades)
 
@@ -314,33 +305,33 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
 
         #Cleaning step T1 
         pl_trades = pl_trades.filter(pl_trades['corr'].is_in(['00', '01', '02']))
-        #pl_trades = pl_trades.filter(~pl_trades['cond'].is_in(['B', 'G', 'J', 'K', 'L', 'T', 'W', 'Z']))
-        
+
         #Check for empty dataframe after the cleaning step
         if pl_trades.height == 0:
             print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
             
         #Cleaning step T2
-        conditions_to_remove = "BGJKLTWZ"
-        pl_trades = pl_trades.filter(~pl_trades['cond'].str.contains(f"[{conditions_to_remove}]"))
+        pl_trades = pl_trades.filter(~pl_trades['cond'].str.contains('B|G|J|K|L|W|Z'))
 
         #Check for empty dataframe after the cleaning step
         if pl_trades.height == 0:
             print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
         
+        #Cleaning step T3
+        pl_trades = handle_duplicates(pl_trades, key_col=['datetime'], value_cols=['price'], sum_col=['vol'], other_cols=['time', "corr"], join_col=['cond', "EX"])
+
         #switch to pandas
         trades = pl_trades.to_pandas()
-
-        #Cleaning step T3
-        trades = handle_duplicates(trades, key_col='datetime', value_cols=['price'], sum_col=['vol'], other_cols=['time', "corr", "cond", "EX"])
+        trades.reset_index(drop=True)
 
         #Cleaning step A2, substitutes T4
-        trades['rolling_median'] = rolling_median_exclude_self(trades['price'].values, 51)
-        trades['rolling_mad'] = rolling_mad_exclude_self(trades['price'].values, 51)
+        trades['rolling_median'] = rolling_median_exclude_self(trades['price'].values, 50)
+        trades['rolling_mad'] = rolling_mad_exclude_self(trades['price'].values, 50)
         trades['exclude'] = np.abs(trades['price'] - trades['rolling_median']) > 10 * trades['rolling_mad']
         trades = trades[~trades['exclude']]
+        trades = trades.drop(columns=['rolling_median', 'rolling_mad', 'exclude'])
 
         #Check for empty dataframe after the cleaning step
         if trades.empty:
@@ -361,7 +352,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             raise NoNbbosException()
         
         #Cleaning Step Q1
-        nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
+        pl_nbbos = handle_duplicates(pl_nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
 
         #Cleaning Step Q2
         pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] >= pl_nbbos['BEST_BID'])
@@ -385,11 +376,16 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         #switch to pandas
         nbbos = pl_nbbos.to_pandas()
 
+        #switch to pandas
+        nbbos = pl_nbbos.to_pandas()
+        nbbos.reset_index(drop=True)
+
         #Cleaning Step Q4
         nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 51)
         nbbos['exclude'] = np.abs(nbbos['midpoint'] - nbbos['rolling_median']) > 10 * nbbos['rolling_mad']
         nbbos = nbbos[~nbbos['exclude']]
+        nbbos = nbbos.drop(columns=['rolling_median', 'rolling_mad', 'exclude'])
         
         #Check for empty dataframe after the cleaning step
         if nbbos.empty:
@@ -400,6 +396,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
 
         
         #Define the appropriate dataframes for variable calculation
+        trades.drop
         #Define the Ask and Bid
         Ask = nbbos[
             ["time", "datetime", "BEST_ASK", "Best_AskSizeShares", "qu_cond"]
@@ -445,6 +442,10 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Bid['value'] = Bid['price'] * Bid['vol']
 
         #Trade Signs estimation
+        trades.reset_index(drop=True, inplace=True)
+        Ask.reset_index(drop=True, inplace=True)
+        Bid.reset_index(drop=True, inplace=True)
+
         trsigns_start_time = time.time()
         logging.info("Estimating trade signs")
         analyzer = TradeAnalyzer(trades, Ask, Bid)
@@ -506,7 +507,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             f.write(f"format time: {format_end_time - format_start_time} seconds\n")
             f.write(f"Clean time: {clean_only_end_time - clean_only_start_time} seconds\n")
             f.write(f"nbbo sign time: {nbbo_end_time - nbbo_start_time} seconds\n")
-            f.write(f"buys_sells time: {specific_df_end_time - specific_df_start_time} seconds\n")
+            f.write(f"specific trades time: {specific_df_end_time - specific_df_start_time} seconds\n")
             f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
             f.write(f"TradeSigns time: {trsigns_time} seconds\n")
 
