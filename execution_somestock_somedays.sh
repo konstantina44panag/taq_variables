@@ -23,12 +23,20 @@ if [ "$path_type" == "ATOM" ]; then
     script_path="variables_v4.py"
     exclude_stocks_file="exclude_stocks.txt"
     contents_file="contents_${year}${month}.txt"
+    prep_analysis_path="onedataset_preparation_analysis.txt"
+    emp_analysis_path="onedataset_empty_bars.txt"
+    var_analysis_path="onedataset_variable_analysis.txt"
+    prof_analysis_path="onedataset_profiling_analysis.txt"
 elif [ "$path_type" == "HPC" ]; then
     hdf5_file_path="/work/pa24/kpanag/output/${year}${month}.h5"
     hdf5_variable_path="/work/pa24/kpanag/variables/${year}${month}_variables.h5"
     script_path="/work/pa24/kpanag/develop_scripts/variables_v4.py"
     exclude_stocks_file="/work/pa24/kpanag/develop_scripts/exclude_stocks.txt"
     contents_file="/work/pa24/kpanag/hdf_check_byname/hdf_contents/hdf_files_${year}${month}"
+    prep_analysis_path="/work/pa24/kpanag/performance/onedataset_preparation_analysis.txt"
+    emp_analysis_path="/work/pa24/kpanag/performance/onedataset_empty_bars.txt"
+    var_analysis_path="/work/pa24/kpanag/performance/onedataset_variable_analysis.txt"
+    prof_analysis_path="/work/pa24/kpanag/performance/onedataset_profiling_analysis.txt"
 else
     echo "Invalid path type. Use 'ATOM' or 'HPC'."
     exit 1

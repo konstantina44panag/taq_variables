@@ -216,7 +216,7 @@ _ = rolling_median_exclude_self(dummy_data, 5)
 _ = rolling_mad_exclude_self(dummy_data, 5)
 
 #def prepare_datasets: Contains the loading of data to dataframes and applies the appropriate operations, this function is called by the python script variables_v4.py which then calculates variables
-def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path):
+def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path, prep_analysis_path, emp_analysis_path, var_analysis_path, prof_analysis_path):
     try:
         load_start_time = time.time()
 
@@ -499,7 +499,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trade_signs.rename(columns={"Initiator": "returns"}, inplace=True)
     
         #Write the time analysis
-        with open("preparation_timeanalysis.txt", "a") as f:
+        with open({prep_analysis_path}, "a") as f:
             f.write(f"Stock: {stock_name}\n")
             f.write(f"Day: {base_date}\n")
             f.write(f"Load time: {load_time} seconds\n")

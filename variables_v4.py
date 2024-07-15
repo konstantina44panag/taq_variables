@@ -38,7 +38,26 @@ parser.add_argument(
     type=str,
     help="The path and name of the output variable file",
 )
-
+parser.add_argument(
+    "prep_analysis_path",
+    type=str,
+    help="The path and name of the preparation analysis file",
+)
+parser.add_argument(
+    "emp_analysis_path",
+    type=str,
+    help="The path and name of the empty variables file",
+)
+parser.add_argument(
+    "var_analysis_path",
+    type=str,
+    help="The path and name of the variables analysis file",
+)
+parser.add_argument(
+    "prof_analysis_path",
+    type=str,
+    help="The path and name of the profiling analysis file",
+)
 args, unknown = parser.parse_known_args()
 
 def main():
@@ -57,7 +76,11 @@ def main():
             args.day,
             args.ctm_dataset_path,
             args.complete_nbbo_dataset_path,
-            args.hdf5_variable_path)
+            args.hdf5_variable_path,
+            args.prep_analysis_path,
+            args.emp_analysis_path,
+            args.var_analysis_path,
+            args.prof_analysis_path)
 
         if result is None:
             print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
@@ -943,13 +966,12 @@ def main():
                 print(f"Data successfully saved to HDF5 key: {hdf5_key}")
         else:
             print("No DataFrames to merge. Skipping HDF5 save step.")
-            empty_bars_file_path = "empty_time_bars.txt"
             message = f"{stock_name} has empty time bars for {day}/{month}/{year}."
             
             try:
-                with open(empty_bars_file_path, "w") as f:
+                with open(args.emp_analysis_path, "w") as f:
                     f.write(message)
-                print(f"Message written to {empty_bars_file_path}")
+                print(f"Message written to {args.emp_analysis_path}")
             except IOError as e:
                 print(f"An error occurred while writing to the file: {e}")
 
@@ -973,7 +995,7 @@ def main():
     write_end_time = time.time()
 
     #Write the time analysis to a text file
-    with open("variables_time.txt", "a") as f:
+    with open({args.var_analysis_path}, "a") as f:
         f.write(f"Stock: {args.stock_name}\n")
         f.write(f"Day: {args.day}\n")
         f.write(f"Only the calculation runtime: {main_end_time - main_start_time} seconds\n")
@@ -995,7 +1017,7 @@ if __name__ == "__main__":
     pr.disable()
 
     # Save profiling results
-    profiling_file = "profiling_total_main_f.txt"
+    profiling_file = {args.prof_analysis_path}
     with open(profiling_file, "a") as f:
         f.write(f"\nStock: {args.stock_name}\n")
         ps = pstats.Stats(pr, stream=f)
