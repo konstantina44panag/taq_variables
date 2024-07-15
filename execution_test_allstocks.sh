@@ -42,13 +42,13 @@ for year in {2014..2014}; do
                     continue
                 fi
 
-                for day_num in "${available_days[@]}"; do
-                    if [[ "$day_num" == "03" ]]; then
-                        date_str="${year}-${formatted_month}-${day_num}"
-                        ctm_dataset_path="/${stock}/day${day_num}/ctm/table"
-                        complete_nbbo_dataset_path="/${stock}/day${day_num}/complete_nbbo/table"
-                        echo "Executing: ./$script_path $hdf5_file_path $date_str $stock $year $formatted_month $day_num"
-                        ./$script_path $hdf5_file_path $date_str $stock $year $formatted_month $day_num $ctm_dataset_path $complete_nbbo_dataset_path $hdf5_variable_path
+                for day in "${available_days[@]}"; do
+                    if [[ "$day" == "03" ]]; then
+                        date_str="${year}-${formatted_month}-${day}"
+                        ctm_dataset_path="/${stock}/day${day}/ctm/table"
+                        complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/table"
+                        echo "Executing: ./$script_path $hdf5_file_path $date_str $stock $year $formatted_month $day"
+                        ./$script_path $hdf5_file_path $date_str $stock $year $formatted_month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5_variable_path
                         echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5_file_path"
                     fi
                 done

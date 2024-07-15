@@ -361,7 +361,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             raise NoNbbosException()
         
         #Cleaning Step Q1
-        nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID', 'midpoint'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
+        nbbos = handle_duplicates(nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
 
         #Cleaning Step Q2
         pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] >= pl_nbbos['BEST_BID'])

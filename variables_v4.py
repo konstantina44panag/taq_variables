@@ -608,7 +608,7 @@ def main():
     end_auction_time = time.time()
 
     #For every trade dataframe, apply the function apply_aggregations from above
-    start_process_OIB_time = time.time()
+    start_process_trades_time = time.time()
     trade_dataframes_to_process = {
         "trades": trades,
         "Buys_trades": Buys_trades,
@@ -653,7 +653,7 @@ def main():
     #Extra variables for trades
     
     #The orderflow calculation is performed seperately
-    start_process_ΟΙΒ_time = time.time()
+    start_process_OIB_time = time.time()
     print(f"Processing OIB statistics")
 
     # orderflow estimation from Buys and Sells

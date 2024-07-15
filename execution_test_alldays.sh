@@ -43,14 +43,14 @@ for year in {2014..2014}; do
                     continue
                 fi
 
-                for day_num in "${available_days[@]}"; do
-                    date_str="${year}-${formatted_month}-${day_num}"
-                    ctm_dataset_path="/${stock}/day${day_num}/ctm/table"
-                    complete_nbbo_dataset_path="/${stock}/day${day_num}/complete_nbbo/table"
-                    echo "Executing: ./$script_path $hdf5_file_path $date_str $stock $year $formatted_month $day_num"
+                for day in "${available_days[@]}"; do
+                    date_str="${year}-${formatted_month}-${day}"
+                    ctm_dataset_path="/${stock}/day${day}/ctm/table"
+                    complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/table"
+                    echo "Executing: ./$script_path $hdf5_file_path $date_str "
                     echo "Running python $(date -I)"
-                    ./$script_path $hdf5_file_path $date_str $stock $year $formatted_month $day_num $ctm_dataset_path $complete_nbbo_dataset_path $hdf5_variable_path
-                    echo "Executed for: $date_str, Stock: $stock, Year: $year, Month: $formatted_month, Day: $day_num, HDF5: $hdf5_file_path"
+                    ./$script_path $hdf5_file_path $date_str $stock $year $formatted_month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5_variable_path
+                    echo "Executed for: $date_str, Stock: $stock, Year: $year, Month: $formatted_month, Day: $day, HDF5: $hdf5_file_path"
                 done
             done
         else
