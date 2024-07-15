@@ -41,8 +41,6 @@ parser.add_argument(
 
 args, unknown = parser.parse_known_args()
 
-print(f"Output HDF5 file path: {args.hdf5_variable_path}")
-
 def main():
     global aggregated_data
     aggregated_data = {}
@@ -86,7 +84,7 @@ def main():
     #Find Opne-Close prices
     def auction_conditions(df):
         pl_df = pl.from_pandas(df)
-        special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|M|6|9'))     #these codes correspond to opening and closing prices 
+        special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|5|M|6|9'))     #these codes correspond to opening and closing prices 
         return special_conditions_df.select(['time', 'price', 'vol', 'EX', 'cond']).to_pandas()
 
     #Calculate the variance
@@ -370,7 +368,7 @@ def main():
                 
             #Find the trading halts, or news event indicator
             def encode_conditions_expr():
-                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKMNOPQSUVRY']), return_dtype=pl.Utf8)  #codes for trading halts and reopenings
+                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKLMNOPQRSTVYZ124']), return_dtype=pl.Utf8)  #codes for trading halts and reopenings
             
             aggregations = [
                 pl.col('price').last().alias(f'{df_name}_last_price'),
@@ -435,7 +433,7 @@ def main():
 
             #Find the trading halts, or news event indicator
             def encode_conditions_expr():
-                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKMNOPQSUVRY']), return_dtype=pl.Utf8)
+                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKLMNOPQRSTVYZ124']), return_dtype=pl.Utf8)
             
             aggregations = [
                 pl.col('price').last().alias(f'{df_name}_last_price'),
@@ -610,7 +608,7 @@ def main():
     end_auction_time = time.time()
 
     #For every trade dataframe, apply the function apply_aggregations from above
-    start_process_trades_time = time.time()
+    start_process_OIB_time = time.time()
     trade_dataframes_to_process = {
         "trades": trades,
         "Buys_trades": Buys_trades,
@@ -655,7 +653,7 @@ def main():
     #Extra variables for trades
     
     #The orderflow calculation is performed seperately
-    start_process_ΟΙΒ_trades_time = time.time()
+    start_process_ΟΙΒ_time = time.time()
     print(f"Processing OIB statistics")
 
     # orderflow estimation from Buys and Sells
@@ -669,7 +667,7 @@ def main():
     #Orderflow Statistics (based on the traded volume)
     aggregated_data["OIB_SHR"] = reindex_to_full_time(apply_voib_shr_aggregations(oib_shr_df), args.base_date)
     
-    end_process_ΟΙΒ_trades_time = time.time()
+    end_process_OIB_time = time.time()
 
     #Herfindahl Index is performed seperately
     start_process_herfindahl_time = time.time()
@@ -981,7 +979,7 @@ def main():
         f.write(f"Only the calculation runtime: {main_end_time - main_start_time} seconds\n")
         f.write(f"Only the auction processing: {end_auction_time - start_auction_time} seconds\n")
         f.write(f"Only the trade processing: {end_process_trades_time - start_process_trades_time} seconds\n")
-        f.write(f"OIB processing: {end_process_ΟΙΒ_trades_time - start_process_ΟΙΒ_trades_time} seconds\n")
+        f.write(f"OIB processing: {end_process_OIB_time - start_process_OIB_time} seconds\n")
         f.write(f"Herfindahl Index processing: {end_process_herfindahl_time- start_process_herfindahl_time} seconds\n")
         f.write(f"Only the quote processing: {end_process_quotes_time - start_process_quotes_time} seconds\n")
         f.write(f"Only the midpoint processing: {end_process_midpoint_time - start_process_midpoint_time} seconds\n")
