@@ -995,7 +995,7 @@ def main():
     write_end_time = time.time()
 
     #Write the time analysis to a text file
-    with open({args.var_analysis_path}, "a") as f:
+    with open(args.var_analysis_path, "a") as f:
         f.write(f"Stock: {args.stock_name}\n")
         f.write(f"Day: {args.day}\n")
         f.write(f"Only the calculation runtime: {main_end_time - main_start_time} seconds\n")
@@ -1017,8 +1017,7 @@ if __name__ == "__main__":
     pr.disable()
 
     # Save profiling results
-    profiling_file = {args.prof_analysis_path}
-    with open(profiling_file, "a") as f:
+    with open(args.prof_analysis_path, "a") as f:
         f.write(f"\nStock: {args.stock_name}\n")
         ps = pstats.Stats(pr, stream=f)
         ps.strip_dirs().sort_stats(pstats.SortKey.CUMULATIVE).print_stats()
