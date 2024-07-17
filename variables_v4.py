@@ -847,17 +847,21 @@ def main():
                     #For variance ratio 1 the variances of 1 second and 5 second returns are divided
                     variance_ratio_df['variance_ratio2'] = np.abs((variance_ratio_df['variance_5s'] / (5 * variance_ratio_df['variance_1s'])) - 1)
                 if returns_df is trade_returns:
-                    aggregated_data["trade_returns_variance_ratio1"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
+                    variance_ratio_df.rename(columns={'variance_ratio': 'trade_ret_variance_ratio'}, inplace=True)
+                    aggregated_data["trade_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['trade_ret_variance_ratio'],  args.base_date)
                     print(f"Variance ratio 1 was calculated for trade/price returns")
                     if ratios_1 is not None and not ratios_1.empty:
-                        aggregated_data["trade_returns_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date)
+                        variance_ratio_df.rename(columns={'variance_ratio2': 'trade_ret_variance_ratio2'}, inplace=True)
+                        aggregated_data["trade_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['trade_ret_variance_ratio2'],  args.base_date)
                         print(f"Variance ratio 2 was calculated for trade/price returns")
 
                 else:
-                    aggregated_data["midprice_returns_variance_ratio1"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
+                    variance_ratio_df.rename(columns={'variance_ratio': 'midprice_ret_variance_ratio'}, inplace=True)
+                    aggregated_data["midprice_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['midprice_ret_variance_ratio'],  args.base_date)
                     print(f"Variance ratio 1 was calculated for midprice returns")
                     if ratios_1 is not None and not ratios_1.empty:
-                        aggregated_data["midprice_returns_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date)
+                        variance_ratio_df.rename(columns={'variance_ratio2': 'midprice_ret_variance_ratio2'}, inplace=True)
+                        aggregated_data["midprice_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['midprice_ret_variance_ratio2'],  args.base_date)
                         print(f"Variance ratio 2 was calculated for midprice returns")
                         
             else:
