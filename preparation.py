@@ -216,7 +216,7 @@ _ = rolling_median_exclude_self(dummy_data, 5)
 _ = rolling_mad_exclude_self(dummy_data, 5)
 
 #def prepare_datasets: Contains the loading of data to dataframes and applies the appropriate operations, this function is called by the python script variables_v4.py which then calculates variables
-def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path, prep_analysis_path, emp_analysis_path, var_analysis_path, prof_analysis_path):
+def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path, prep_analysis_path=None, emp_analysis_path=None, var_analysis_path=None, prof_analysis_path=None):
     try:
         load_start_time = time.time()
 
@@ -499,17 +499,18 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trade_signs.rename(columns={"Initiator": "returns"}, inplace=True)
     
         #Write the time analysis
-        with open(prep_analysis_path, "a") as f:
-            f.write(f"Stock: {stock_name}\n")
-            f.write(f"Day: {base_date}\n")
-            f.write(f"Load time: {load_time} seconds\n")
-            f.write(f"decode time: {decode_end_time - decode_start_time} seconds\n")
-            f.write(f"format time: {format_end_time - format_start_time} seconds\n")
-            f.write(f"Clean time: {clean_only_end_time - clean_only_start_time} seconds\n")
-            f.write(f"nbbo sign time: {nbbo_end_time - nbbo_start_time} seconds\n")
-            f.write(f"specific trades time: {specific_df_end_time - specific_df_start_time} seconds\n")
-            f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
-            f.write(f"TradeSigns time: {trsigns_time} seconds\n")
+        if prep_analysis_path:
+            with open(prep_analysis_path, "a") as f:
+                f.write(f"Stock: {stock_name}\n")
+                f.write(f"Day: {base_date}\n")
+                f.write(f"Load time: {load_time} seconds\n")
+                f.write(f"decode time: {decode_end_time - decode_start_time} seconds\n")
+                f.write(f"format time: {format_end_time - format_start_time} seconds\n")
+                f.write(f"Clean time: {clean_only_end_time - clean_only_start_time} seconds\n")
+                f.write(f"nbbo sign time: {nbbo_end_time - nbbo_start_time} seconds\n")
+                f.write(f"specific trades time: {specific_df_end_time - specific_df_start_time} seconds\n")
+                f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
+                f.write(f"TradeSigns time: {trsigns_time} seconds\n")
 
         return trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs
 

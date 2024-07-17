@@ -39,9 +39,9 @@ parser.add_argument(
     help="The path and name of the output variable file",
 )
 parser.add_argument(
-    "prep_analysis_path",
+    "--prep_analysis_path",
     type=str,
-    help="The path and name of the preparation analysis file",
+    help="The path and name of the preparation analysis file (optional)",
 )
 parser.add_argument(
     "emp_analysis_path",
@@ -49,14 +49,14 @@ parser.add_argument(
     help="The path and name of the empty variables file",
 )
 parser.add_argument(
-    "var_analysis_path",
+    "--var_analysis_path",
     type=str,
-    help="The path and name of the variables analysis file",
+    help="The path and name of the variables analysis file (optional)",
 )
 parser.add_argument(
-    "prof_analysis_path",
+    "--prof_analysis_path",
     type=str,
-    help="The path and name of the profiling analysis file",
+    help="The path and name of the profiling analysis file (optional)",
 )
 args, unknown = parser.parse_known_args()
 
@@ -211,14 +211,13 @@ def main():
             return None
         
         if outside_trading:
-            morning_index = pd.date_range(start=f"{base_date} 04:00", end=f"{base_date} 09:29", freq="30min")
-            evening_index = pd.date_range(start=f"{base_date} 16:01", end=f"{base_date} 20:00", freq="30min")
+            morning_index = pd.date_range(start=f"{base_date} 03:30", end=f"{base_date} 09:30", freq="30min")
+            evening_index = pd.date_range(start=f"{base_date} 16:00", end=f"{base_date} 20:00", freq="30min")
             full_time_index = morning_index.union(evening_index)
         else:
             full_time_index = pd.date_range(start=f"{base_date} 09:30", end=f"{base_date} 16:00", freq="1min")
-
-        return df.reindex(full_time_index)
-    
+        df_reindexed = df.reindex(full_time_index)
+        return df_reindexed
 
     # Aggregated Functions for Trades
     #Variables for the trades dataframes, most of them are formed at the same time 
@@ -228,11 +227,8 @@ def main():
             return None
         if len(df) == 1:
             return df
-        df_filtered = df.between_time("09:29", "16:00").copy()
-
-        if df_filtered.empty or df_filtered.isna().all().all():
-            return None
-            
+        df_filtered = df.copy()
+           
         #Make sure the time column is a column and not an index
         df_filtered.reset_index(inplace = True)
         
@@ -295,12 +291,7 @@ def main():
         if len(df) == 1:
             return df
 
-        start_time_morning = f"{base_date} 09:30"
-        end_time_afternoon = f"{base_date} 16:00"
-        df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
-        
-        if df_filtered.empty or df_filtered.isna().all().all():
-            return None
+        df_filtered = df.copy()
         
         df_filtered.reset_index(inplace = True)
         
@@ -357,11 +348,8 @@ def main():
         if len(df) == 1:
             return df
 
-        df_filtered = df.between_time("09:29", "16:00").copy()
+        df_filtered = df.copy()
 
-        if df_filtered.empty or df_filtered.isna().all().all():
-            return None
-        
         df_filtered.reset_index(inplace = True)
 
         #Calculate durations of prices and weighted_price by these durations
@@ -420,13 +408,8 @@ def main():
         if len(df) == 1:
             return df
         
-        start_time_morning = f"{base_date} 09:30"
-        end_time_afternoon = f"{base_date} 16:00"
-        df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
+        df_filtered = df.copy()
 
-        if df_filtered.empty or df_filtered.isna().all().all():
-            return None
-        
         df_filtered.reset_index(inplace = True)
         
         #Calculate durations of prices and weighted_price by these durations
@@ -487,14 +470,9 @@ def main():
         if len(df) == 1:
             return df
         
-        if 'time' in df.columns:
-            df.set_index('time', inplace=True)
 
-        df_filtered = df.between_time("09:29", "16:00").copy()
+        df_filtered = df.copy()
 
-        if df_filtered.empty or df_filtered.isna().all().all():
-            return None
-        
         pl_df = pl.from_pandas(df_filtered.reset_index())
 
         try:
@@ -528,16 +506,9 @@ def main():
             return None
         if len(df) == 1:
             return df
-        if 'time' in df.columns:
-            df.set_index('time', inplace=True)
+       
+        df_filtered = df.copy()
 
-        start_time_morning = f"{base_date} 09:30"
-        end_time_afternoon = f"{base_date} 16:00"
-        df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
-
-        if df_filtered.empty or df_filtered.isna().all().all():
-            return None
-        
         pl_df = pl.from_pandas(df_filtered.reset_index())
 
         try:
@@ -580,7 +551,7 @@ def main():
             end_time_afternoon = f"{base_date} 16:00"
             df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
         else:
-            df_filtered = df.between_time("09:29", "16:00").copy()
+            df_filtered = df.between_time("09:30", "16:00").copy()
             
         #Check for an empty filtered dataframe
         if df_filtered.empty or df_filtered.isna().all().all():
@@ -609,17 +580,11 @@ def main():
 
         if resampled_df.is_empty():
             return None
-            
-        #Get reid of the first nan "return"
-        if not outside_trading:
-            resampled_df = resampled_df.filter(
-                (pl.col('time') >= pd.to_datetime(f"{base_date} 09:30")) & 
-                (pl.col('time') <= pd.to_datetime(f"{base_date} 16:00"))
-            )
-
+    
         #since the volume has been used for the weighting, it is now dropped from the dataframe
         if 'vol' in resampled_df.columns:
             resampled_df = resampled_df.drop('vol')
+        
         return resampled_df
 
 
@@ -632,6 +597,7 @@ def main():
 
     #For every trade dataframe, apply the function apply_aggregations from above
     start_process_trades_time = time.time()
+
     trade_dataframes_to_process = {
         "trades": trades,
         "Buys_trades": Buys_trades,
@@ -647,7 +613,7 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
       
-        df_filtered = df.between_time("09:29", "16:00").copy()
+        df_filtered = df.between_time("09:30", "16:00").copy()
         start_time_morning = f"{args.base_date} 09:30"
         end_time_afternoon = f"{args.base_date} 16:00"
         df_filtered_outside = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
@@ -656,7 +622,6 @@ def main():
             try:
                 print(f"Processing {name} DataFrame")
                 agg_df = apply_aggregations(df, name)
-                agg_df = agg_df.between_time("09:30", "16:00")
                 aggregated_data[name] = reindex_to_full_time(agg_df, args.base_date)                
             except KeyError as e:
                 print(f"Error processing {name}: {e}")
@@ -666,6 +631,7 @@ def main():
             try:
                 print(f"Processing {name} DataFrame outside trading hours")
                 agg_df_outside_trading = apply_aggregations_outside_trading(df, name, args.base_date)
+                print(agg_df_outside_trading)
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
                 print(f"Error processing {name}: {e} outside trading hours")
@@ -695,6 +661,7 @@ def main():
     #Herfindahl Index is performed seperately
     start_process_herfindahl_time = time.time()
     print(f"Processing Herfindahl Index")
+
     def calculate_hindex(df, name):
         if df is None or df.empty or df.isna().all().all():
             return None
@@ -749,7 +716,7 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
       
-        df_filtered = df.between_time("09:29", "16:00").copy()
+        df_filtered = df.between_time("09:30", "16:00").copy()
         start_time_morning = f"{args.base_date} 09:30"
         end_time_afternoon = f"{args.base_date} 16:00"
         df_filtered_outside = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
@@ -758,7 +725,6 @@ def main():
             try:
                 print(f"Processing Midpoint DataFrame")
                 midpoint_agg_df = apply_midpoint_aggregations(Midpoint)
-                midpoint_agg_df = midpoint_agg_df.between_time("09:30", "16:00")
                 aggregated_data["Midpoint"] = reindex_to_full_time(midpoint_agg_df, args.base_date)
             except KeyError as e:
                 print(f"Error processing Midpoint: {e}")
@@ -775,11 +741,11 @@ def main():
 
     #Processing Quotes, apply the function apply_quote_aggregations from above
     start_process_quotes_time = time.time()
+
     quote_dataframes_to_process = {
         "Ask": Ask,
         "Bid": Bid,
     }
-
 
     for name, df in quote_dataframes_to_process.items():
         if df is None or df.empty or df.isna().all().all():
@@ -788,7 +754,7 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
       
-        df_filtered = df.between_time("09:29", "16:00").copy()
+        df_filtered = df.between_time("09:30", "16:00").copy()
         start_time_morning = f"{args.base_date} 09:30"
         end_time_afternoon = f"{args.base_date} 16:00"
         df_filtered_outside = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
@@ -797,7 +763,6 @@ def main():
             try:
                 print(f"Processing {name} DataFrame")
                 agg_df = apply_quote_aggregations(df, name)
-                agg_df = agg_df.between_time("09:30", "16:00")
                 aggregated_data[name] = reindex_to_full_time(agg_df,  args.base_date)          
             except KeyError as e:
                 print(f"Error processing {name}: {e}")
@@ -906,19 +871,8 @@ def main():
     #End calculation time
     main_end_time = time.time()
 
-    #Structure of the list
-    #    print("Structure of aggregated_data:")
-    #    for name, df in aggregated_data.items():
-    #        print(f"DataFrame name: {name}")
-    #        print(df.head())  # Print the first few rows of each DataFrame
-    #        print(df.info())  # Print the summary of the DataFrame
-    #        for column in df.columns:
-    #            print(f"Column {column} has type: {df[column].dtype}")
-    #       print("-" * 50)
-
     write_start_time = time.time()
     
-
     # Function to merge dataframes on time index
     def merge_dataframes(df1, df2):
         return pd.merge(df1, df2, left_index=True, right_index=True, how='outer')
@@ -942,6 +896,11 @@ def main():
 
     consolidated_df_outside_trading.reset_index(inplace=True)
     consolidated_df_outside_trading.rename(columns={'index': 'time'}, inplace=True)
+
+    # Debug: Check individual DataFrames in aggregated_data_outside_trading
+    #for name, df in aggregated_data_outside_trading.items():
+    #    print(f"DataFrame: {name}")
+    #    print(df.info())
 
     #Function for saving the variable datasets in a new HDF5 file
     def process_and_save_df(df, hdf5_variable_path, stock_name, day, month, year, time_range_name):
@@ -995,29 +954,33 @@ def main():
     write_end_time = time.time()
 
     #Write the time analysis to a text file
-    with open(args.var_analysis_path, "a") as f:
-        f.write(f"Stock: {args.stock_name}\n")
-        f.write(f"Day: {args.day}\n")
-        f.write(f"Only the calculation runtime: {main_end_time - main_start_time} seconds\n")
-        f.write(f"Only the auction processing: {end_auction_time - start_auction_time} seconds\n")
-        f.write(f"Only the trade processing: {end_process_trades_time - start_process_trades_time} seconds\n")
-        f.write(f"OIB processing: {end_process_OIB_time - start_process_OIB_time} seconds\n")
-        f.write(f"Herfindahl Index processing: {end_process_herfindahl_time- start_process_herfindahl_time} seconds\n")
-        f.write(f"Only the quote processing: {end_process_quotes_time - start_process_quotes_time} seconds\n")
-        f.write(f"Only the midpoint processing: {end_process_midpoint_time - start_process_midpoint_time} seconds\n")
-        f.write(f"Only the return processing: {end_process_returns_time - start_process_returns_time} seconds\n")
-        f.write(f"Only the variance ratios processing: {end_process_vr_returns_time - start_process_vr_returns_time} seconds\n")
-        f.write(f"Write runtime: {write_end_time - write_start_time} seconds\n")
+    if args.var_analysis_path:
+        with open(args.var_analysis_path, "a") as f:
+            f.write(f"Stock: {args.stock_name}\n")
+            f.write(f"Day: {args.day}\n")
+            f.write(f"Only the calculation runtime: {main_end_time - main_start_time} seconds\n")
+            f.write(f"Only the auction processing: {end_auction_time - start_auction_time} seconds\n")
+            f.write(f"Only the trade processing: {end_process_trades_time - start_process_trades_time} seconds\n")
+            f.write(f"OIB processing: {end_process_OIB_time - start_process_OIB_time} seconds\n")
+            f.write(f"Herfindahl Index processing: {end_process_herfindahl_time- start_process_herfindahl_time} seconds\n")
+            f.write(f"Only the quote processing: {end_process_quotes_time - start_process_quotes_time} seconds\n")
+            f.write(f"Only the midpoint processing: {end_process_midpoint_time - start_process_midpoint_time} seconds\n")
+            f.write(f"Only the return processing: {end_process_returns_time - start_process_returns_time} seconds\n")
+            f.write(f"Only the variance ratios processing: {end_process_vr_returns_time - start_process_vr_returns_time} seconds\n")
+            f.write(f"Write runtime: {write_end_time - write_start_time} seconds\n")
 
 if __name__ == "__main__":
-    # Profile the main function
-    pr = cProfile.Profile()
-    pr.enable()
-    main()
-    pr.disable()
+    if args.prof_analysis_path:
+        # Profile the main function
+        pr = cProfile.Profile()
+        pr.enable()
+        main()
+        pr.disable()
 
-    # Save profiling results
-    with open(args.prof_analysis_path, "a") as f:
-        f.write(f"\nStock: {args.stock_name}\n")
-        ps = pstats.Stats(pr, stream=f)
-        ps.strip_dirs().sort_stats(pstats.SortKey.CUMULATIVE).print_stats()
+        # Save profiling results
+        with open(args.prof_analysis_path, "a") as f:
+            f.write(f"\nStock: {args.stock_name}\n")
+            ps = pstats.Stats(pr, stream=f)
+            ps.strip_dirs().sort_stats(pstats.SortKey.CUMULATIVE).print_stats()
+    else:
+        main()
