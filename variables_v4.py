@@ -631,7 +631,6 @@ def main():
             try:
                 print(f"Processing {name} DataFrame outside trading hours")
                 agg_df_outside_trading = apply_aggregations_outside_trading(df, name, args.base_date)
-                print(agg_df_outside_trading)
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
                 print(f"Error processing {name}: {e} outside trading hours")
@@ -958,7 +957,7 @@ def main():
     write_end_time = time.time()
 
     #Write the time analysis to a text file
-    if args.var_analysis_path:
+    if args.var_analysis_path is not None:
         with open(args.var_analysis_path, "a") as f:
             f.write(f"Stock: {args.stock_name}\n")
             f.write(f"Day: {args.day}\n")
@@ -974,7 +973,8 @@ def main():
             f.write(f"Write runtime: {write_end_time - write_start_time} seconds\n")
 
 if __name__ == "__main__":
-    if args.prof_analysis_path:
+    print(f"Profiling path: {args.prof_analysis_path}")  # Debug statement to check profiling path
+    if args.prof_analysis_path is not None:
         # Profile the main function
         pr = cProfile.Profile()
         pr.enable()
@@ -982,9 +982,13 @@ if __name__ == "__main__":
         pr.disable()
 
         # Save profiling results
-        with open(args.prof_analysis_path, "a") as f:
-            f.write(f"\nStock: {args.stock_name}\n")
-            ps = pstats.Stats(pr, stream=f)
-            ps.strip_dirs().sort_stats(pstats.SortKey.CUMULATIVE).print_stats()
+        try:
+            with open(args.prof_analysis_path, "a") as f:
+                f.write(f"\nStock: {args.stock_name}\n")
+                ps = pstats.Stats(pr, stream=f)
+                ps.strip_dirs().sort_stats(pstats.SortKey.CUMULATIVE).print_stats()
+            print(f"Profiling data written to {args.prof_analysis_path}")  # Confirm profiling data is written
+        except IOError as e:
+            print(f"An error occurred while writing the profiling data: {e}")
     else:
         main()

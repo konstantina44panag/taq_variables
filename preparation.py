@@ -499,7 +499,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trade_signs.rename(columns={"Initiator": "returns"}, inplace=True)
     
         #Write the time analysis
-        if prep_analysis_path:
+        if prep_analysis_path is not None:
             with open(prep_analysis_path, "a") as f:
                 f.write(f"Stock: {stock_name}\n")
                 f.write(f"Day: {base_date}\n")
