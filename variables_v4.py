@@ -688,17 +688,17 @@ def main():
         ])
         
         minutely_data = minutely_data.with_columns([
-            (minutely_data['sum_of_squared_values'] / minutely_data['sum_of_values_squared']).alias('proportion')
+            (minutely_data['sum_of_squared_values'] / minutely_data['sum_of_values_squared']).alias('Herfindahl')
         ])
         
-        proportion_column_name = f'proportion_{name}'
+        proportion_column_name = f'Herfindahl_{name}'
         minutely_data = minutely_data.select([
-            'time', 'proportion'
+            'time', 'Herfindahl'
         ]).rename({
-            'proportion': proportion_column_name
+            'Herfindahl': proportion_column_name
         })
         
-        aggregated_data[f"hindex_{name}"] = reindex_to_full_time(minutely_data.to_pandas().set_index('time'), args.base_date)
+        aggregated_data[f"Herfindahl_{name}"] = reindex_to_full_time(minutely_data.to_pandas().set_index('time'), args.base_date)
 
 
     #Apply the Herfindahl Index for these dataframes
