@@ -33,6 +33,8 @@ stocks=()
 while [[ $# -gt 0 && "$1" != '--' ]]; do
     if [[ "$1" != "all" ]]; then
         days+=("$1")
+    else
+        days=("all")
     fi
     shift
 done
@@ -111,7 +113,7 @@ if [ -f "$hdf5OriginalFile" ]; then
     unset IFS
 
     # Ignore non-valid stocks based on TAQ Cleaning techniques page 3
-    if [ "${#stocks[@]}" -eq 1 ] && [ "${stocks[0]}" == "all" ]; then
+    if [ "${stocks[0]}" == "all" ]; then
         stocks=("${available_stocks[@]}")
     fi
 
@@ -131,7 +133,7 @@ if [ -f "$hdf5OriginalFile" ]; then
             continue
         fi
 
-        if [ "${#days[@]}" -eq 1 ] && [ "${days[0]}" == "all" ]; then
+        if [ "${days[0]}" == "all" ]; then
             days=("${available_days[@]}")
         fi
 
