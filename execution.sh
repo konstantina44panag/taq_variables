@@ -10,9 +10,11 @@
 #The syntax for all trading days for every stock is : ./script.sh REG 2014 03 -- all -- IBM A AA ABC MSFT
 #The first three arguments are always the machine year month, these can change as well
 #
-#Modify
-#Line 56, provide the appropriate path of the HDF5 for reading
+#Modify the directories in lines:
+#Line 56, provides the appropriate path for reading the HDF5. The path filled is the appropriate on ATOM for reading a small copy of hdf5. 
+#For the original hdf5 the folder "test_hdf5" should be changed to "raw_hdf5"
 #Lines 57-65, the paths of the remaining files are set to the current directory where the program runs
+#Lines 56 -65 can change directories
 
 set -eu
 export RUST_BACKTRACE=full
