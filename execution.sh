@@ -158,7 +158,7 @@ if [ -f "$hdf5OriginalFile" ]; then
                 python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis
                 echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5OriginalFile"
             else
-                echo "The $stock was not trades on ${month}-${year}-${day}"
+                echo "The $stock was not traded on ${month}-${year}-${day}"
             fi
         done
     done
