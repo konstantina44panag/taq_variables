@@ -18,16 +18,15 @@
   ```bash
    ./script.sh REG 2014 03 -- 02 03 -- IBM
 
-
 5. **All Trading Days for Every Stock:**
- ```bash
+  ```bash
    ./script.sh REG 2014 03 -- all -- IBM A AA ABC MSFT
 
 6. **All Trading Stocks for some days:**
- ```bash
+  ```bash
    ./script.sh REG 2014 03 -- 03 04 05 -- all
 
 7. **All Trading Stocks for all Trading Days:**
- ```bash
+  ```bash
    ./script.sh REG 2014 03 -- all -- all
    
