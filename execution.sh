@@ -60,7 +60,7 @@ emptyVariablesName="empty_bars.txt"
 
 # Determine the base path and other paths based on the path_type argument
 if [ "$machine" == "REG" ]; then
-    hdf5OriginalFilePath="/mnt/e/repository/data/taq/processed/raw_hdf5/"
+    hdf5OriginalFilePath="/mnt/e/repository/data/taq/processed/test_hdf5/"
     hdf5VariableFilePath="$current_dir/"
     pythonScriptPath="$current_dir/"
     excludeStocksFilePath="$current_dir/"
@@ -151,8 +151,8 @@ if [ -f "$hdf5OriginalFile" ]; then
                 hdf5VariableFile="${hdf5VariableFilePath}${hdf5VariableFileName}"
                 #Construct the paths inside the hdf5 file
                 date_str="${year}-${month}-${day}"
-                ctm_dataset_path="/${stock}/day${day}/ctm/table"
-                complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/table"
+                ctm_dataset_path="/${stock}/day${day}/ctm/"
+                complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/"
                 echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day"
                 #pass the arguments to the python script
                 python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis

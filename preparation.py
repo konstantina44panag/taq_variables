@@ -49,14 +49,11 @@ def load_dataset(
 ):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
     try:
-        dataset = hdf_file.get_node(dataset_path)
-        column_names = [
-            dataset._v_attrs[attr_name]
-            for attr_name in dataset._v_attrs._f_list()
-            if "_kind" in attr_name
-        ]
-        column_names = [item for sublist in column_names for item in sublist]
+        table_path=f"{dataset_path}table"
+        print(table_path)
+        dataset = hdf_file.get_node(table_path)
 
+        column_names =  hdf_file.get_node(dataset_path)._v_attrs["column_names"]
         data = {}
         for col in columns_of_interest:
             if col in column_names:
@@ -88,13 +85,10 @@ def load_dataset_with_exclusion(
 ):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
     try:
-        dataset = hdf_file.get_node(dataset_path)
-        column_names = [
-            dataset._v_attrs[attr_name]
-            for attr_name in dataset._v_attrs._f_list()
-            if "_kind" in attr_name
-        ]
-        column_names = [item for sublist in column_names for item in sublist]
+        table_path=f"{dataset_path}table"
+        dataset = hdf_file.get_node(table_path)
+
+        column_names=hdf_file.get_node(dataset_path)._v_attrs["column_names"]
 
         data = {}
         for col in columns_of_interest:
