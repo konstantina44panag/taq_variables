@@ -11,6 +11,7 @@ import polars as pl
 from datetime import timedelta
 from datetime import datetime
 from preparation import prepare_datasets, NoTradesException, NoNbbosException
+pd.set_option('display.max_rows', 300)
 # Parse arguments
 parser = argparse.ArgumentParser(
     description="Prepare datasets for trade sign analysis and variable estimation."
@@ -140,8 +141,8 @@ def main():
         if 'time' in df2.columns:
             df2.set_index('time', inplace=True)
 
-        df1_filtered = df1.between_time("09:30", "16:00").copy()
-        df2_filtered = df2.between_time("09:30", "16:00").copy()
+        df1_filtered = df1.between_time("09:30", "15:59:59").copy()
+        df2_filtered = df2.between_time("09:30", "15:59:59").copy()
         
         if df1_filtered.empty or df2_filtered.empty:
             return None
@@ -211,23 +212,22 @@ def main():
             return None
         
         if outside_trading:
-            morning_index = pd.date_range(start=f"{base_date} 03:30", end=f"{base_date} 09:30", freq="30min")
+            morning_index = pd.date_range(start=f"{base_date} 03:30", end=f"{base_date} 09:29", freq="30min")
             evening_index = pd.date_range(start=f"{base_date} 16:00", end=f"{base_date} 20:00", freq="30min")
             full_time_index = morning_index.union(evening_index)
         else:
-            full_time_index = pd.date_range(start=f"{base_date} 09:30", end=f"{base_date} 16:00", freq="1min")
+            full_time_index = pd.date_range(start=f"{base_date} 09:30", end=f"{base_date} 15:59", freq="1min")
         df_reindexed = df.reindex(full_time_index)
         return df_reindexed
 
     # Aggregated Functions for Trades
     #Variables for the trades dataframes, most of them are formed at the same time 
-    def apply_aggregations(df, df_name):
+    def apply_aggregations(df_filtered, df_name):
         #Check for empty dataframe or for dimension size 1 when there is no reason for creating minute bars
-        if df is None or df.empty or df.isna().all().all():
+        if df_filtered is None or df_filtered.empty or df_filtered.isna().all().all():
             return None
-        if len(df) == 1:
-            return df
-        df_filtered = df.copy()
+        if len(df_filtered) == 1:
+            return df_filtered
            
         #Make sure the time column is a column and not an index
         df_filtered.reset_index(inplace = True)
@@ -285,14 +285,12 @@ def main():
             return None
    
    #Variables for the trades dataframes, almost the same operations as the def apply_aggregations, but this function is used for outside trading hours. Resampling in 30 minutes!
-    def apply_aggregations_outside_trading(df, df_name, base_date):
-        if df is None or df.empty or df.isna().all().all():
+    def apply_aggregations_outside_trading(df_filtered, df_name):
+        if df_filtered is None or df_filtered.empty or df_filtered.isna().all().all():
             return None
-        if len(df) == 1:
-            return df
-
-        df_filtered = df.copy()
-        
+        if len(df_filtered) == 1:
+            return df_filtered
+       
         df_filtered.reset_index(inplace = True)
         
         #Calculate durations of prices and weighted_price by these durations
@@ -342,13 +340,11 @@ def main():
             return None
     
     #Aggregated Functions for Quotes
-    def apply_quote_aggregations(df, df_name):
-        if df is None or df.empty or df.isna().all().all():
+    def apply_quote_aggregations(df_filtered, df_name):
+        if df_filtered is None or df_filtered.empty or df_filtered.isna().all().all():
             return None
-        if len(df) == 1:
-            return df
-
-        df_filtered = df.copy()
+        if len(df_filtered) == 1:
+            return df_filtered
 
         df_filtered.reset_index(inplace = True)
 
@@ -402,14 +398,12 @@ def main():
             print(f"An error occurred: {e}")
             return None
 
-    def apply_quote_aggregations_outside_trading(df, df_name, base_date):
-        if df is None or df.empty or df.isna().all().all():
+    def apply_quote_aggregations_outside_trading(df_filtered, df_name):
+        if df_filtered is None or df_filtered.empty or df_filtered.isna().all().all():
             return None
-        if len(df) == 1:
-            return df
+        if len(df_filtered) == 1:
+            return df_filtered
         
-        df_filtered = df.copy()
-
         df_filtered.reset_index(inplace = True)
         
         #Calculate durations of prices and weighted_price by these durations
@@ -464,15 +458,12 @@ def main():
     
     #Functions for Midprice
 
-    def apply_midpoint_aggregations(df):
-        if df is None or df.empty or df.isna().all().all():
+    def apply_midpoint_aggregations(df_filtered):
+        if df_filtered is None or df_filtered.empty or df_filtered.isna().all().all():
             return None
-        if len(df) == 1:
-            return df
+        if len(df_filtered) == 1:
+            return df_filtered
         
-
-        df_filtered = df.copy()
-
         pl_df = pl.from_pandas(df_filtered.reset_index())
 
         try:
@@ -501,13 +492,11 @@ def main():
         
 
 
-    def apply_midpoint_aggregations_outside_trading(df, base_date):
-        if df is None or df.empty or df.isna().all().all():
+    def apply_midpoint_aggregations_outside_trading(df_filtered):
+        if df_filtered is None or df_filtered.empty or df_filtered.isna().all().all():
             return None
-        if len(df) == 1:
-            return df
-       
-        df_filtered = df.copy()
+        if len(df_filtered) == 1:
+            return df_filtered
 
         pl_df = pl.from_pandas(df_filtered.reset_index())
 
@@ -549,9 +538,9 @@ def main():
         if outside_trading:
             start_time_morning = f"{base_date} 09:30"
             end_time_afternoon = f"{base_date} 16:00"
-            df_filtered = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
+            df_filtered = df[(df.index < start_time_morning) | (df.index >= end_time_afternoon)].copy()
         else:
-            df_filtered = df.between_time("09:30", "16:00").copy()
+            df_filtered = df.between_time("09:30", "15:59:59").copy()
             
         #Check for an empty filtered dataframe
         if df_filtered.empty or df_filtered.isna().all().all():
@@ -613,15 +602,15 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
       
-        df_filtered = df.between_time("09:30", "16:00").copy()
+        df_filtered = df.between_time("09:30", "15:59:59").copy()
         start_time_morning = f"{args.base_date} 09:30"
         end_time_afternoon = f"{args.base_date} 16:00"
-        df_filtered_outside = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
-
+        df_filtered_outside = df[(df.index < start_time_morning) | (df.index >= end_time_afternoon)].copy()
+ 
         if not df_filtered.empty:
             try:
                 print(f"Processing {name} DataFrame")
-                agg_df = apply_aggregations(df, name)
+                agg_df = apply_aggregations(df_filtered, name)
                 aggregated_data[name] = reindex_to_full_time(agg_df, args.base_date)                
             except KeyError as e:
                 print(f"Error processing {name}: {e}")
@@ -630,7 +619,7 @@ def main():
         if not df_filtered_outside.empty:
             try:
                 print(f"Processing {name} DataFrame outside trading hours")
-                agg_df_outside_trading = apply_aggregations_outside_trading(df, name, args.base_date)
+                agg_df_outside_trading = apply_aggregations_outside_trading(df_filtered_outside, name)
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
                 print(f"Error processing {name}: {e} outside trading hours")
@@ -667,7 +656,7 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
 
-        df_filtered = df.between_time('09:30', '16:00').copy()
+        df_filtered = df.between_time("09:30", "15:59:59").copy()
         if df_filtered.empty or df_filtered.isna().all().all():
             return None
         
@@ -712,18 +701,18 @@ def main():
 
     if not Midpoint.empty:
 
-        if 'time' in df.columns:
-            df.set_index('time', inplace=True)
+        if 'time' in Midpoint.columns:
+            Midpoint.set_index('time', inplace=True)
       
-        df_filtered = df.between_time("09:30", "16:00").copy()
+        df_filtered = Midpoint.between_time("09:30", "15:59:59").copy()
         start_time_morning = f"{args.base_date} 09:30"
         end_time_afternoon = f"{args.base_date} 16:00"
-        df_filtered_outside = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
+        df_filtered_outside = Midpoint[(Midpoint.index < start_time_morning) | (Midpoint.index >= end_time_afternoon)].copy()
         
         if not df_filtered.empty:
             try:
                 print(f"Processing Midpoint DataFrame")
-                midpoint_agg_df = apply_midpoint_aggregations(Midpoint)
+                midpoint_agg_df = apply_midpoint_aggregations(df_filtered)
                 aggregated_data["Midpoint"] = reindex_to_full_time(midpoint_agg_df, args.base_date)
             except KeyError as e:
                 print(f"Error processing Midpoint: {e}")
@@ -731,7 +720,7 @@ def main():
         if not df_filtered_outside.empty:
             try:
                 print(f"Processing Midpoint DataFrame outside trading hours")
-                midpoint_agg_df_outside_trading = apply_midpoint_aggregations_outside_trading(Midpoint, args.base_date)
+                midpoint_agg_df_outside_trading = apply_midpoint_aggregations_outside_trading(df_filtered_outside)
                 aggregated_data_outside_trading["Midpoint"] = reindex_to_full_time(midpoint_agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
                 print(f"Error processing Midpoint outside trading hours: {e}")        
@@ -753,15 +742,15 @@ def main():
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
       
-        df_filtered = df.between_time("09:30", "16:00").copy()
+        df_filtered = df.between_time("09:30", "15:59:59").copy()
         start_time_morning = f"{args.base_date} 09:30"
         end_time_afternoon = f"{args.base_date} 16:00"
-        df_filtered_outside = df[(df.index < start_time_morning) | (df.index > end_time_afternoon)].copy()
+        df_filtered_outside = df[(df.index < start_time_morning) | (df.index >= end_time_afternoon)].copy()
 
         if not df_filtered.empty:
             try:
                 print(f"Processing {name} DataFrame")
-                agg_df = apply_quote_aggregations(df, name)
+                agg_df = apply_quote_aggregations(df_filtered, name)
                 aggregated_data[name] = reindex_to_full_time(agg_df,  args.base_date)          
             except KeyError as e:
                 print(f"Error processing {name}: {e}")
@@ -770,7 +759,7 @@ def main():
         if not df_filtered_outside.empty:
             try:
                 print(f"Processing {name} DataFrame outside trading hours")
-                agg_df_outside_trading = apply_quote_aggregations_outside_trading(df, name, args.base_date)
+                agg_df_outside_trading = apply_quote_aggregations_outside_trading(df_filtered_outside, name)
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading,  args.base_date, outside_trading=True)
             except KeyError as e:
                 print(f"Error processing {name}: {e} outside trading hours")
