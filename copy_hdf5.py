@@ -1,25 +1,43 @@
 #!/usr/bin/env python3.11
-import h5py
-import pandas as pd
-import os
-import tables
-import numpy as np
+# This file creates small copies of the original hdf5 files for the specified stocks and the specified days.
+# To call this script please make sure of the appropriate directories in lines 23, 24
+# The syntax is:
+# python3.11 copy_hdf5.py year month -- days NUMBER -- stocks NAME
+# python3.11 copy_hdf5.py 2018 10 --days 03 04 05 --stocks ABC AAPL IBM ZZ
 
+import h5py
+import argparse
+
+# Custom parser to handle -- separator
+class CustomArgumentParser(argparse.ArgumentParser):
+    def convert_arg_line_to_args(self, arg_line):
+        return arg_line.split()
+
+# Set up argument parser
+parser = CustomArgumentParser(description='Process HDF5 files.')
+parser.add_argument('year', type=str, help='Year of the data')
+parser.add_argument('month', type=str, help='Month of the data')
+parser.add_argument('--days', nargs='+', help='Days of the data', required=True)
+parser.add_argument('--stocks', nargs='+', help='Stock symbols', required=True)
+
+# Parse the arguments
+args = parser.parse_args()
+year = args.year
+month = args.month
+days = args.days
+stocks = args.stocks
 
 # Paths to the original and new HDF5 files
-original_file_path = '/mnt/e/repository/data/taq/processed/raw_hdf5/201403.h5'
-new_file_path = '/mnt/e/repository/data/taq/processed/test_hdf5/201403.h5'
+original_file_path = f'/mnt/e/repository/data/taq/processed/raw_hdf5/{year}{month}.h5'
+new_file_path = f'/mnt/e/repository/data/taq/processed/test_hdf5/{year}{month}.h5'
 
-datasets_to_copy = [
-    '/IBM/day03/ctm/',
-    '/IBM/day03/complete_nbbo/',
-    '/IBM/day04/ctm/',
-    '/IBM/day04/complete_nbbo/',
-    '/ABC/day03/ctm/',
-    '/ABC/day03/complete_nbbo/',
-    '/ABC/day04/ctm/',
-    '/ABC/day04/complete_nbbo/'
-]
+# Generate datasets to copy based on the provided days and stocks
+datasets_to_copy = []
+for stock in stocks:
+    for day in days:
+        datasets_to_copy.append(f'/{stock}/day{day}/ctm/')
+        datasets_to_copy.append(f'/{stock}/day{day}/complete_nbbo/')
+        datasets_to_copy.append(f'/{stock}/day{day}/mastm/')
 
 def ensure_group(h5file, group_path):
     """ Ensure all groups in the given path exist in the target file """
