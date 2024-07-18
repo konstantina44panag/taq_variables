@@ -14,11 +14,11 @@
    ```bash
    ./script.sh REG 2014 03 -- 02 -- IBM MSFT
 
-4. **Multiple Days:**
+4. **Multiple Days:** 
   ```bash
    ./script.sh REG 2014 03 -- 02 03 -- IBM
 
-5. **All Trading Days for Every Stock:**
+5. **All Trading Days for Every Stock:** 
   ```bash
    ./script.sh REG 2014 03 -- all -- IBM A AA ABC MSFT
 
