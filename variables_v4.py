@@ -109,8 +109,11 @@ def main():
     def auction_conditions(df):
         pl_df = pl.from_pandas(df)
         special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|5|M|6|9'))     #these codes correspond to opening and closing prices 
-        return special_conditions_df.select(['time', 'price', 'vol', 'EX', 'cond']).to_pandas()
-
+        cleaned_df = pl_df.filter(~pl.col('cond').str.contains('Q|O|5|M|6|9'))      #now remove opening and closing prices from trades dataframe
+        special_conditions_pd = special_conditions_df.select(['time', 'price', 'vol', 'EX', 'cond']).to_pandas()
+        cleaned_df_pd = cleaned_df.to_pandas()
+        return special_conditions_pd, cleaned_df_pd
+    
     #Calculate the variance
     def calculate_minute_volatility(returns):
         n = len(returns)
@@ -581,7 +584,7 @@ def main():
 
     #Apply the function for open /close prices
     start_auction_time = time.time()
-    auction_conditions_df = auction_conditions(trades)
+    auction_conditions_df, trades = auction_conditions(trades)
     end_auction_time = time.time()
 
     #For every trade dataframe, apply the function apply_aggregations from above
