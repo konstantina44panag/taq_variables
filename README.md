@@ -7,31 +7,25 @@
    ./script.sh REG 2014 03 -- 02 -- IBM
 HPC Machine:
 
-bash
 Copy code
 ./script.sh HPC 2014 03 -- 02 -- IBM
 One Day:
 
-bash
 Copy code
 ./script.sh REG 2014 03 -- 02 -- IBM
 One Stock:
 
-bash
 Copy code
 ./script.sh REG 2014 03 -- 02 -- IBM MSFT
 Some Days:
 
-bash
 Copy code
 ./script.sh REG 2014 03 -- 02 03 -- IBM
 Some Stocks:
 
-bash
 Copy code
 ./script.sh REG 2014 03 -- 02 03 -- IBM A AA ABC MSFT
 All Trading Days for Every Stock:
 
-bash
 Copy code
 ./script.sh REG 2014 03 -- all -- IBM A AA ABC MSFT
