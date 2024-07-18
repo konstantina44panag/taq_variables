@@ -137,15 +137,21 @@ if [ -f "$hdf5OriginalFile" ]; then
             days=("${available_days[@]}")
         fi
 
-        for available_day in "${days[@]}"; do
-            hdf5VariableFileName="${year}${month}${available_day}_variables.h5"
-            hdf5VariableFile="${hdf5VariableFilePath}${hdf5VariableFileName}"
-            date_str="${year}-${month}-${available_day}"
-            ctm_dataset_path="/${stock}/day${available_day}/ctm/table"
-            complete_nbbo_dataset_path="/${stock}/day${available_day}/complete_nbbo/table"
-            echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock $year $month $available_day"
-            python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $available_day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis
-            echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5OriginalFile"
+        available_days_str=$(printf "%s\n" "${available_days[@]}")
+
+        for day in "${days[@]}"; do
+            if echo "$available_days_str" | grep -qx "$day"; then
+                hdf5VariableFileName="${year}${month}${day}_variables.h5"
+                hdf5VariableFile="${hdf5VariableFilePath}${hdf5VariableFileName}"
+                date_str="${year}-${month}-${day}"
+                ctm_dataset_path="/${stock}/day${day}/ctm/table"
+                complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/table"
+                echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day"
+                python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis
+                echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5OriginalFile"
+            else
+                echo "The $stock was not trades on ${month}-${year}-${day}"
+            fi
         done
     done
 else
