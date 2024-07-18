@@ -10,24 +10,24 @@
    ```bash
    ./script.sh HPC 2014 03 -- 02 -- IBM
 
-3.**Multiple Stocks:**
+3. **Multiple Stocks:**
    ```bash
    ./script.sh REG 2014 03 -- 02 -- IBM MSFT
 
-4.**Multiple Days:**
+4. **Multiple Days:**
   ```bash
    ./script.sh REG 2014 03 -- 02 03 -- IBM
 
 
-5.**All Trading Days for Every Stock:**
+5. **All Trading Days for Every Stock:**
  ```bash
    ./script.sh REG 2014 03 -- all -- IBM A AA ABC MSFT
 
-6.**All Trading Stocks for some days:**
+6. **All Trading Stocks for some days:**
  ```bash
    ./script.sh REG 2014 03 -- 03 04 05 -- all
 
-7.**All Trading Stocks for all Trading Days:**
+7. **All Trading Stocks for all Trading Days:**
  ```bash
    ./script.sh REG 2014 03 -- all -- all
    
