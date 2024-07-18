@@ -112,18 +112,20 @@ if [ -f "$hdf5OriginalFile" ]; then
     available_stocks=($(grep '/day[0-9][0-9]/ctm/table' "$hdf5ContentsFile" | sed -E 's|/([^/]+)/day[0-9][0-9]/ctm/table.*|\1|' | sort | uniq))
     unset IFS
 
-    # Ignore non-valid stocks based on TAQ Cleaning techniques page 3
+    # Create a list of invalid stocks
     if [ "${stocks[0]}" == "all" ]; then
         stocks=("${available_stocks[@]}")
     fi
 
+    #For every stock argument:
     for stock in "${stocks[@]}"; do
+        #Exclude stocks, google doc Taq Cleaning Techniques, page 3
         if [[ " ${exclude_stocks[@]} " =~ " ${stock} " ]]; then
             echo "Stock $stock is in the exclude list, skipping..."
             continue
         fi
 
-        # Find all available days from the contents
+        # Find all available days when the stock was traded, from the hdf5 contents
         IFS=$'\n'
         available_days=($(grep "/${stock}/day[0-9][0-9]/ctm/table" "$hdf5ContentsFile" | sed -E 's|.*/day([0-9][0-9])/ctm/table.*|\1|' | sort | uniq))
         unset IFS
@@ -133,20 +135,26 @@ if [ -f "$hdf5OriginalFile" ]; then
             continue
         fi
 
+        #If the argument is to execute all days, then  all days will be the list of the loop, otherwise the list of loop is the list of day arguments
         if [ "${days[0]}" == "all" ]; then
             days=("${available_days[@]}")
         fi
 
         available_days_str=$(printf "%s\n" "${available_days[@]}")
-
+        
+        #For every day in the list of days:
         for day in "${days[@]}"; do
+            #In case the list of the loop is a list from the arguments, then check that each day exists in the available days when the stock traded
             if echo "$available_days_str" | grep -qx "$day"; then
+                #The variable file name should be defined here, because it depends on the day
                 hdf5VariableFileName="${year}${month}${day}_variables.h5"
                 hdf5VariableFile="${hdf5VariableFilePath}${hdf5VariableFileName}"
+                #Construct the paths inside the hdf5 file
                 date_str="${year}-${month}-${day}"
                 ctm_dataset_path="/${stock}/day${day}/ctm/table"
                 complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/table"
                 echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day"
+                #pass the arguments to the python script
                 python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis
                 echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5OriginalFile"
             else
