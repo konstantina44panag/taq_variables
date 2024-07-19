@@ -165,8 +165,8 @@ def main():
         pl_df = pl.from_pandas(df)
 
         resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
-        pl.col('OIB_SHR').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('VOIB_SHR'),
-        pl.col('OIB_SHR').map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias('OIB_SHR_autocorr'),
+        pl.col('OIB_SHR').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('OIB_volatility'),
+        pl.col('OIB_SHR').map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias('OIB_autocorr'),
         ])
         return resampled_df.to_pandas().set_index('time')
             
@@ -250,7 +250,7 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='1m', label='left').agg([
-                pl.col('count').max().alias(f'{df_name}_max_events_per_sec')
+                pl.col('count').max().alias('max_events_ps')
             ])
 
             #Compute the VWAP
@@ -263,15 +263,15 @@ def main():
                 
             #Unite the different variables/aggregation methods, to be computed at the same time
             aggregations = [
-                pl.col('price').last().alias(f'{df_name}_last_price'),
-                pl.col('vol').last().alias(f'{df_name}_last_vol'),
-                pl.col('time').last().alias(f'{df_name}_last_time'),
-                pl.col('price').mean().alias(f'{df_name}_avg_price'),
-                pl.col('vol').mean().alias(f'{df_name}_avg_vol'),
-                pl.col('vol').sum().alias(f'{df_name}_tot_vol'),
-                calculate_vwap_pl().alias(f'{df_name}_vwap'),
-                calculate_twap_pl().alias(f'{df_name}_twap'),
-                pl.count('price').alias(f'{df_name}_num_events')
+                pl.col('price').last().alias('last_price'),
+                pl.col('vol').last().alias('last_vol'),
+                pl.col('time').last().alias('last_time'),
+                pl.col('price').mean().alias('avg_price'),
+                pl.col('vol').mean().alias('avg_vol'),
+                pl.col('vol').sum().alias('tot_vol'),
+                calculate_vwap_pl().alias('vwap'),
+                calculate_twap_pl().alias('twap'),
+                pl.count('price').alias('num_events')
             ]
 
             #Resample to one minute bars, using the aggregations above
@@ -310,7 +310,7 @@ def main():
             
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='30m', label='left').agg([
-                pl.col('count').max().alias(f'{df_name}_max_events_per_sec')
+                pl.col('count').max().alias('max_events_ps')
             ])
 
             #Compute the VWAP
@@ -322,15 +322,15 @@ def main():
                 return (pl.sum('weighted_price') / pl.sum('durations'))
             
             aggregations = [
-                pl.col('price').last().alias(f'{df_name}_last_price'),
-                pl.col('vol').last().alias(f'{df_name}_last_vol'),
-                pl.col('time').last().alias(f'{df_name}_last_time'),
-                pl.col('price').mean().alias(f'{df_name}_avg_price'),
-                pl.col('vol').mean().alias(f'{df_name}_avg_vol'),
-                pl.col('vol').sum().alias(f'{df_name}_tot_vol'),
-                calculate_vwap_pl().alias(f'{df_name}_vwap'),
-                calculate_twap_pl().alias(f'{df_name}_twap'),
-                pl.count('price').alias(f'{df_name}_num_events')
+                pl.col('price').last().alias('last_price'),
+                pl.col('vol').last().alias('last_vol'),
+                pl.col('time').last().alias('last_time'),
+                pl.col('price').mean().alias('avg_price'),
+                pl.col('vol').mean().alias('avg_vol'),
+                pl.col('vol').sum().alias('tot_vol'),
+                calculate_vwap_pl().alias('vwap'),
+                calculate_twap_pl().alias('twap'),
+                pl.count('price').alias('num_events')
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left', label='left').agg(aggregations)
@@ -365,7 +365,7 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='1m', label='left').agg([
-                pl.col('count').max().alias(f'{df_name}_max_events_per_sec')
+                pl.col('count').max().alias('max_events_ps')
             ])
 
             #Compute the VWAP
@@ -381,16 +381,16 @@ def main():
                 return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKLMNOPQRSTVYZ124']), return_dtype=pl.Utf8)  #codes for trading halts and reopenings
             
             aggregations = [
-                pl.col('price').last().alias(f'{df_name}_last_price'),
-                pl.col('vol').last().alias(f'{df_name}_last_vol'),
-                pl.col('time').last().alias(f'{df_name}_last_time'),
-                pl.col('price').mean().alias(f'{df_name}_avg_price'),
-                pl.col('vol').mean().alias(f'{df_name}_avg_vol'),
-                pl.col('vol').sum().alias(f'{df_name}_tot_vol'),
-                calculate_vwap_pl().alias(f'{df_name}_vwap'),
-                calculate_twap_pl().alias(f'{df_name}_twap'),
-                pl.count('price').alias(f'{df_name}_num_events'),
-                encode_conditions_expr().alias(f'{df_name}_halt_indic')
+                pl.col('price').last().alias('last_price'),
+                pl.col('vol').last().alias('last_vol'),
+                pl.col('time').last().alias('last_time'),
+                pl.col('price').mean().alias('avg_price'),
+                pl.col('vol').mean().alias('avg_vol'),
+                pl.col('vol').sum().alias('tot_vol'),
+                calculate_vwap_pl().alias('vwap'),
+                calculate_twap_pl().alias('twap'),
+                pl.count('price').alias('num_events'),
+                encode_conditions_expr().alias('halt_indic')
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg(aggregations)
@@ -423,7 +423,7 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='30m', label='left').agg([
-                pl.col('count').max().alias(f'{df_name}_max_events_per_sec')
+                pl.col('count').max().alias('max_events_ps')
             ])
 
             #Compute the VWAP
@@ -439,16 +439,16 @@ def main():
                 return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKLMNOPQRSTVYZ124']), return_dtype=pl.Utf8)
             
             aggregations = [
-                pl.col('price').last().alias(f'{df_name}_last_price'),
-                pl.col('vol').last().alias(f'{df_name}_last_vol'),
-                pl.col('time').last().alias(f'{df_name}_last_time'),
-                pl.col('price').mean().alias(f'{df_name}_avg_price'),
-                pl.col('vol').mean().alias(f'{df_name}_avg_vol'),
-                pl.col('vol').sum().alias(f'{df_name}_tot_vol'),
-                calculate_vwap_pl().alias(f'{df_name}_vwap'),
-                calculate_twap_pl().alias(f'{df_name}_twap'),
-                pl.count('price').alias(f'{df_name}_num_events'),
-                encode_conditions_expr().alias(f'{df_name}_halt_indic')
+                pl.col('price').last().alias('last_price'),
+                pl.col('vol').last().alias('last_vol'),
+                pl.col('time').last().alias('last_time'),
+                pl.col('price').mean().alias('avg_price'),
+                pl.col('vol').mean().alias('avg_vol'),
+                pl.col('vol').sum().alias('tot_vol'),
+                calculate_vwap_pl().alias('vwap'),
+                calculate_twap_pl().alias('twap'),
+                pl.count('price').alias('num_events'),
+                encode_conditions_expr().alias('halt_indic')
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left', label='left').agg(aggregations)
@@ -477,12 +477,12 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='1m', label='left').agg([
-                pl.col('count').max().alias(f'midprice_max_events_per_sec')
+                pl.col('count').max().alias('max_events_ps')
             ])
 
             #Count the number of events
             aggregations = [
-                pl.count('price').alias(f'midprice_num_events'),
+                pl.count('price').alias('num_events'),
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg(aggregations)
@@ -511,12 +511,12 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='30m', label='left').agg([
-                pl.col('count').max().alias(f'midprice_max_events_per_sec')
+                pl.col('count').max().alias('max_events_ps')
             ])
 
             #Count the number of events
             aggregations = [
-                pl.count('price').alias(f'midprice_num_events'),
+                pl.count('price').alias('num_events'),
             ]
 
             resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left', label='left').agg(aggregations)
@@ -645,8 +645,8 @@ def main():
         oib_shr_df = pd.DataFrame(columns=['time', 'OIB_SHR'])
 
     #Orderflow Statistics (based on the traded volume)
-    aggregated_data["OIB_SHR"] = reindex_to_full_time(apply_voib_shr_aggregations(oib_shr_df), args.base_date)
-    
+    aggregated_data["Orderflow"] = reindex_to_full_time(apply_voib_shr_aggregations(oib_shr_df), args.base_date)
+
     end_process_OIB_time = time.time()
 
     #Herfindahl Index is performed seperately
@@ -872,33 +872,86 @@ def main():
     def merge_dataframes(df1, df2):
         return pd.merge(df1, df2, left_index=True, right_index=True, how='outer')
     
-    consolidated_df = pd.DataFrame()
-    
-    #Create a single dataframe 'consolidated_df' for all names and dataframes in the aggregated_data list
+    #Split the saved datasets in aggregated data to datasets specific for trades, Buys_trades, Selld_trades, Retail trades ...
+    categories = {
+        "Trades": {"trades", "Herfindahl_trades", "trade_returns", "trade_sign_stat", "trade_ret_variance_ratio", "trade_ret_variance_ratio2"},
+        "Buys_trades": {"Buys_trades", "Herfindahl_Buys_trades"},
+        "Sells_trades": {"Sells_trades", "Herfindahl_Sells_trades"},
+        "Retail_trades": {"Retail_trades", "Herfindahl_Retail_trades"},
+        "Oddlot_trades": {"Oddlot_trades", "Herfindahl_Oddlot_trades"},
+        "Ask": {"Ask", "Herfindahl_Ask"},
+        "Bid": {"Bid", "Herfindahl_Bid"},
+        "Midpoint": {"Midpoint", "midprice_returns", "nbbo_sign_stat", "midprice_ret_variance_ratio", "midprice_ret_variance_ratio2"},
+        "Orderflow": {"Orderflow"}
+    }
+
+    for category in categories:
+        print(category)
+        exec(f"merged_{category} = pd.DataFrame()")
+        exec(f"merged_outside_trading_{category} = pd.DataFrame()")
+
+
     for name, df in aggregated_data.items():
         if df is not None and not df.isna().all().all():
-            consolidated_df = merge_dataframes(consolidated_df, df) if not consolidated_df.empty else df
+            if name in categories["Trades"]:
+                category = "Trades"
+            elif name in categories["Buys_trades"]:
+                category = "Buys_trades"
+            elif name in categories["Sells_trades"]:
+                category = "Sells_trades"
+            elif name in categories["Retail_trades"]:
+                category = "Retail_trades"
+            elif name in categories["Oddlot_trades"]:
+                category = "Oddlot_trades"
+            elif name in categories["Ask"]:
+                category = "Ask"
+            elif name in categories["Bid"]:
+                category = "Bid"
+            elif name in categories["Midpoint"]:
+                category = "Midpoint"
+            elif name in categories["Orderflow"]:
+                category = "Orderflow"    
+            else:
+                continue  # If the name doesn't match any category, skip it
 
-    #Create a single dataframe 'consolidated_df_outside_trading' for all names and dataframes in the aggregated_data list
-    consolidated_df_outside_trading = pd.DataFrame()
+        # Merge dataframes if the consolidated dataframe for the category is not empty, else assign df to it
+            if eval(f"not merged_{category}.empty"):
+                exec(f"merged_{category} = merge_dataframes(merged_{category}, df)")
+            else:
+                exec(f"merged_{category} = df")
+
     for name, df in aggregated_data_outside_trading.items():
         if df is not None and not df.isna().all().all():
-            consolidated_df_outside_trading = merge_dataframes(consolidated_df_outside_trading, df) if not consolidated_df_outside_trading.empty else df
+            if name in categories["Trades"]:
+                category = "Trades"
+            elif name in categories["Buys_trades"]:
+                category = "Buys_trades"
+            elif name in categories["Sells_trades"]:
+                category = "Sells_trades"
+            elif name in categories["Retail_trades"]:
+                category = "Retail_trades"
+            elif name in categories["Oddlot_trades"]:
+                category = "Oddlot_trades"
+            elif name in categories["Ask"]:
+                category = "Ask"
+            elif name in categories["Bid"]:
+                category = "Bid"
+            elif name in categories["Midpoint"]:
+                category = "Midpoint"
+            elif name in categories["Orderflow"]:
+                category = "Orderflow"  
+            else:
+                continue  # If the name doesn't match any category, skip it
 
-    #Reset the time index to be the time column of the variable dataset
-    consolidated_df.reset_index(inplace=True)
-    consolidated_df.rename(columns={'index': 'time'}, inplace=True)
+        # Merge dataframes if the consolidated dataframe for the category is not empty, else assign df to it
+            if eval(f"not merged_outside_trading_{category}.empty"):
+                exec(f"merged_outside_trading_{category} = merge_dataframes(merged_outside_trading_{category}, df)")
+            else:
+                exec(f"merged_outside_trading_{category} = df")
 
-    consolidated_df_outside_trading.reset_index(inplace=True)
-    consolidated_df_outside_trading.rename(columns={'index': 'time'}, inplace=True)
-
-    # Debug: Check individual DataFrames in aggregated_data_outside_trading
-    #for name, df in aggregated_data_outside_trading.items():
-    #    print(f"DataFrame: {name}")
-    #    print(df.info())
 
     #Function for saving the variable datasets in a new HDF5 file
-    def process_and_save_df(df, hdf5_variable_path, stock_name, day, month, year, time_range_name):
+    def process_and_save_df(df, hdf5_variable_path, stock_name, day, month, year, time_range_name, category_name=None):
         if not df.empty:
             # Convert object columns to string
             for col in df.columns:
@@ -913,40 +966,40 @@ def main():
                     datetime_columns.append(col)
             
             # Save data to HDF5 file
-            print(f"Saving data to HDF5 file: {hdf5_variable_path}")
             with pd.HDFStore(hdf5_variable_path, mode="a", complevel=9, complib="zlib") as store:
                 hdf5_key = f"/{stock_name}/day{day}/{time_range_name}"
+                if category_name:
+                    hdf5_key += f"/{category_name}"
                 store.append(hdf5_key, df, format="table", data_columns=True, index=False)
                 print(f"Data successfully saved to HDF5 key: {hdf5_key}")
         else:
-            print("No DataFrames to merge. Skipping HDF5 save step.")
-            message = f"{stock_name} has empty time bars for {day}/{month}/{year}."
-            
+            message = f"{stock_name} has empty time bars for {day}/{month}/{year} and category: {category_name} {time_range_name}.\n"         
             try:
-                with open(args.emp_analysis_path, "w") as f:
+                with open(args.emp_analysis_path, "a") as f:
                     f.write(message)
                 print(f"Message written to {args.emp_analysis_path}")
             except IOError as e:
                 print(f"An error occurred while writing to the file: {e}")
 
-    #Save the variables inside trading hours in the key time_bars for that stock and that day
-    if consolidated_df is not None and not consolidated_df.empty:
-        process_and_save_df(consolidated_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "time_bars")
-    else:
-        print("Consolidated DataFrame is empty or None. Skipping save.")
 
-    #Save the variables outside trading hours in the key outside_trading_time_bars for that stock and that day
-    if consolidated_df_outside_trading is not None and not consolidated_df_outside_trading.empty:
-        process_and_save_df(consolidated_df_outside_trading, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "outside_trading_time_bars")
-    else:
-        print("Consolidated DataFrame outside trading is empty or None. Skipping save.")
-
-    if auction_conditions_df is not None and not auction_conditions_df.empty:
+    #Call saving function for groups daily_auction, inside_trading, outside_trading
+    if auction_conditions_df is not None:
         process_and_save_df(auction_conditions_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_auction")
-    else:
-        print("Daily auction, open and close prices not found")
 
-    write_end_time = time.time()
+    for category in categories:
+        df = eval(f"merged_{category}")
+        if df is not None:
+            df.reset_index(inplace=True)
+            df.rename(columns={'index': 'time'}, inplace=True)
+            process_and_save_df(df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "inside_trading", category)
+
+        df_outside = eval(f"merged_outside_trading_{category}")
+        if df_outside is not None:
+            df_outside.reset_index(inplace=True)
+            df_outside.rename(columns={'index': 'time'}, inplace=True)
+            process_and_save_df(df_outside, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "outside_trading", category)
+
+        write_end_time = time.time()
 
     #Write the time analysis to a text file
     if args.var_analysis_path is not None:
