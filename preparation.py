@@ -462,7 +462,8 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Bid.drop(columns=["time"], inplace=True)
         Bid.rename(columns={"datetime": "time"}, inplace=True)
 
-        
+        print(trades)
+        print(tradessigns)
         #Define trade specific dataframes
         specific_df_start_time = time.time()
         
@@ -478,7 +479,9 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
 
         #Define the Oddlot_trades dataframe
         target_date = datetime(2014, 1, 1)
-        Oddlot_trades = trades[(trades['time'] >= target_date) & (trades['cond'] == "I")].copy()
+        Oddlot_trades = tradessigns[(tradessigns['time'] >= target_date) & (tradessigns['cond'].str.contains("I"))].copy()
+        Buys_Oddlot_trades = Oddlot_trades[Oddlot_trades["Initiator"] == 1].copy()
+        Sells_Oddlot_trades = Oddlot_trades[Oddlot_trades["Initiator"] == -1].copy()
         specific_df_end_time = time.time()
         
         #Define the Returns dataframe
@@ -506,7 +509,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
                 f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
                 f.write(f"TradeSigns time: {trsigns_time} seconds\n")
 
-        return trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs
+        return trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs
 
     except  NoTradesException:
         return None

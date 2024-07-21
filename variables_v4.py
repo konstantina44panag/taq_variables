@@ -88,7 +88,7 @@ def main():
             print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
             return
 
-        trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result
+        trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result
 
     except NoTradesException:
         print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
@@ -132,12 +132,12 @@ def main():
     #Calculate the autocorrelation
     def calculate_autocorrelation(returns, lag=1):
         x = returns.to_numpy()
-        x = x[~np.isnan(x)] 
-        n = len(returns)
-        if len(x) <= lag or np.var(x) == 0:
+        x = x[~np.isnan(x)]
+        if len(x) <= lag:
             return np.nan
-        autocorr_values = acf(x, nlags=lag, missing='conservative')
-        return autocorr_values[lag] if len(autocorr_values) > lag else np.nan
+        if np.var(x) == 0 or np.var(x[:-lag]) == 0 or np.var(x[lag:]) == 0:
+            return np.nan
+        return np.corrcoef(x[:-lag], x[lag:])[0, 1]
     
     #Calculate the orderflow by Chordia, Hu, Subrahmanyam and Tong, MS 2019
     def calculate_voib_shr(df1, df2):
@@ -601,6 +601,8 @@ def main():
         "Sells_trades": Sells_trades,
         "Retail_trades": Retail_trades,
         "Oddlot_trades": Oddlot_trades,
+        "Buys_Oddlot_trades": Buys_Oddlot_trades,
+        "Sells_Oddlot_trades": Sells_Oddlot_trades
     }
 
     for name, df in trade_dataframes_to_process.items():
@@ -698,8 +700,8 @@ def main():
 
 
     #Apply the Herfindahl Index for these dataframes
-    for df, name in zip([trades, Buys_trades, Sells_trades, Retail_trades, Oddlot_trades, Ask, Bid], 
-                        ["trades", "Buys_trades", "Sells_trades", "Retail_trades", "Oddlot_trades", "Ask", "Bid"]):
+    for df, name in zip([trades, Buys_trades, Sells_trades, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Ask, Bid], 
+                        ["trades", "Buys_trades", "Sells_trades", "Retail_trades", "Oddlot_trades", "Buys_Oddlot_trades", "Sells_Oddlot_trades", "Ask", "Bid"]):
         calculate_hindex(df, name)
        
     end_process_herfindahl_time = time.time()
@@ -884,6 +886,8 @@ def main():
         "Sells_trades": {"Sells_trades", "Herfindahl_Sells_trades"},
         "Retail_trades": {"Retail_trades", "Herfindahl_Retail_trades"},
         "Oddlot_trades": {"Oddlot_trades", "Herfindahl_Oddlot_trades"},
+        "Buys_Oddlot_trades": {"Buys_Oddlot_trades", "Herfindahl_Buys_Oddlot_trades"},
+        "Sells_Oddlot_trades": {"Sells_Oddlot_trades", "Herfindahl_Sells_Oddlot_trades"},
         "Ask": {"Ask", "Herfindahl_Ask"},
         "Bid": {"Bid", "Herfindahl_Bid"},
         "Midpoint": {"Midpoint", "midprice_returns", "nbbo_sign_stat", "midprice_ret_variance_ratio", "midprice_ret_variance_ratio2"},
@@ -908,6 +912,10 @@ def main():
                 category = "Retail_trades"
             elif name in categories["Oddlot_trades"]:
                 category = "Oddlot_trades"
+            elif name in categories["Buys_Oddlot_trades"]:
+                category = "Buys_Oddlot_trades"
+            elif name in categories["Sells_Oddlot_trades"]:
+                category = "Sells_Oddlot_trades"
             elif name in categories["Ask"]:
                 category = "Ask"
             elif name in categories["Bid"]:
@@ -937,6 +945,10 @@ def main():
                 category = "Retail_trades"
             elif name in categories["Oddlot_trades"]:
                 category = "Oddlot_trades"
+            elif name in categories["Buys_Oddlot_trades"]:
+                category = "Buys_Oddlot_trades"
+            elif name in categories["Sells_Oddlot_trades"]:
+                category = "Sells_Oddlot_trades"
             elif name in categories["Ask"]:
                 category = "Ask"
             elif name in categories["Bid"]:
@@ -944,7 +956,7 @@ def main():
             elif name in categories["Midpoint"]:
                 category = "Midpoint"
             elif name in categories["Orderflow"]:
-                category = "Orderflow"  
+                category = "Orderflow"    
             else:
                 continue  # If the name doesn't match any category, skip it
 
