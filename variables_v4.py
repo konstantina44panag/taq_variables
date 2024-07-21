@@ -10,6 +10,7 @@ import time
 import polars as pl
 from datetime import timedelta
 from datetime import datetime
+from statsmodels.tsa.stattools import acf
 from preparation import prepare_datasets, NoTradesException, NoNbbosException
 pd.set_option('display.max_rows', 300)
 # Parse arguments
@@ -115,25 +116,29 @@ def main():
         return special_conditions_pd, cleaned_df_pd
     
     #Calculate the variance
+    def calculate_minute_variance(returns):
+        n = len(returns)
+        if n <= 1:
+            return np.nan
+        return returns.var()
+
+    #Calculate the volatility
     def calculate_minute_volatility(returns):
         n = len(returns)
         if n <= 1:
             return np.nan
-        mean_return = returns.mean()
-        return ((returns - mean_return) ** 2).sum() / (len(returns) - 1)
+        return returns.std()
 
     #Calculate the autocorrelation
-    def calculate_autocorrelation(returns):
+    def calculate_autocorrelation(returns, lag=1):
+        x = returns.to_numpy()
+        x = x[~np.isnan(x)] 
         n = len(returns)
-        if n <= 1:
+        if len(x) <= lag or np.var(x) == 0:
             return np.nan
-        mean = returns.mean()
-        variance = ((returns - mean) ** 2).sum() / (n - 1)
-        if np.isclose(variance, 0):
-            return np.nan
-        covariance = ((returns - mean) * (returns.shift(1) - mean)).sum() / (n - 1)
-        return covariance / variance
-
+        autocorr_values = acf(x, nlags=lag, missing='conservative')
+        return autocorr_values[lag] if len(autocorr_values) > lag else np.nan
+    
     #Calculate the orderflow by Chordia, Hu, Subrahmanyam and Tong, MS 2019
     def calculate_voib_shr(df1, df2):
         if df1 is None or df1.empty or df1.isna().all().all() or df2 is None or df2.empty or df2.isna().all().all():
@@ -205,7 +210,7 @@ def main():
         if pl_df.shape[0] == 1:
             return None
         resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
-        pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('variance')])
+        pl.col(column).map_elements(calculate_minute_variance, return_dtype=pl.Float64).alias('variance')])
            
         return resampled_df.to_pandas().set_index('time')
     
