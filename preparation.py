@@ -455,22 +455,68 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
 
         trades.drop(columns=["time"], inplace=True)
         trades.rename(columns={"datetime": "time"}, inplace=True)
-        tradessigns.drop(columns=["time", "time_org"], inplace=True)
-        tradessigns.rename(columns={"datetime": "time"}, inplace=True)
+        tradessigns.drop(columns=["time"], inplace=True)
+        tradessigns.rename(columns={"datetime": "time", "time_org": "time_float"}, inplace=True)
         Ask.drop(columns=["time"], inplace=True)
         Ask.rename(columns={"datetime": "time"}, inplace=True)
         Bid.drop(columns=["time"], inplace=True)
         Bid.rename(columns={"datetime": "time"}, inplace=True)
 
-        print(trades)
-        print(tradessigns)
         #Define trade specific dataframes
         specific_df_start_time = time.time()
+
+        @njit
+        def find_next_initiator_numba(times, prices, initiators):
+            n = len(times)
+
+            tNextSell_tob = np.full(n, np.nan)
+            pNextSell_tob = np.full(n, np.nan)
+            tNextBuy_tos = np.full(n, np.nan)
+            pNextBuy_tos = np.full(n, np.nan)
+
+            for i in range(n):
+                if initiators[i] == 1:
+                    for j in range(i + 1, n):
+                        if initiators[j] == -1:
+                            tNextSell_tob[i] = times[j]
+                            pNextSell_tob[i] = prices[j]
+                            break
+
+            for i in range(n):
+                if initiators[i] == -1:
+                    for j in range(i + 1, n):
+                        if initiators[j] == 1:
+                            tNextBuy_tos[i] = times[j]
+                            pNextBuy_tos[i] = prices[j]
+                            break
+
+            return tNextSell_tob, pNextSell_tob, tNextBuy_tos, pNextBuy_tos
         
+        def find_next_initiator(df):
+            times = df['time_float'].values
+            prices = df['price'].values
+            initiators = df['Initiator'].values
+
+            tNextSell_tob, pNextSell_tob, tNextBuy_tos, pNextBuy_tos = find_next_initiator_numba(times, prices, initiators)
+
+            df['tNextSell_tob'] = tNextSell_tob
+            df['pNextSell_tob'] = pNextSell_tob
+            df['tNextBuy_tos'] = tNextBuy_tos
+            df['pNextBuy_tos'] = pNextBuy_tos
+
+            return df
+
+        tradessigns = find_next_initiator(tradessigns)
+
         #Define the Buys_trades and Sell_trades dataframes
         Buys_trades = tradessigns[tradessigns["Initiator"] == 1].copy()
         Sells_trades = tradessigns[tradessigns["Initiator"] == -1].copy()
-        
+        Buys_trades.drop(columns=['tNextBuy_tos', 'pNextBuy_tos'], inplace=True)
+        Sells_trades.drop(columns=['tNextSell_tob', 'pNextSell_tob'], inplace=True)
+
+        Buys_trades['dtNextSell_tob'] = Buys_trades['tNextSell_tob'] - Buys_trades['time_float']
+        Sells_trades['dtNextBuy_tos'] = Sells_trades['tNextBuy_tos'] - Sells_trades['time_float']
+
         #Define the Retail_trades dataframe
         Retail_trades = trades.loc[trades["EX"] == "D"].copy()
         Retail_trades['Z'] = 100 * (Retail_trades['price'] % 0.01)        

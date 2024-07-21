@@ -214,6 +214,7 @@ def main():
            
         return resampled_df.to_pandas().set_index('time')
     
+    
     #Fill the minutes in the time column after the time bars are calculated for different dataframes and variables, so that entire time bar data can be merged in one dataframe
     def reindex_to_full_time(df, base_date, outside_trading=False):
         if df is None or df.empty or df.isna().all().all():
@@ -278,6 +279,13 @@ def main():
                 calculate_twap_pl().alias('twap'),
                 pl.count('price').alias('num_events')
             ]
+            if df_name == 'Buys_trades':
+                aggregations.append(pl.col('pNextSell_tob').mean().alias('pNextSell_avg'))
+                aggregations.append(pl.col('dtNextSell_tob').mean().alias('dtNextSell_avg'))
+
+            if df_name == 'Sells_trades':
+                aggregations.append(pl.col('pNextBuy_tos').mean().alias('pNextBuy_avg'))
+                aggregations.append(pl.col('dtNextBuy_tos').mean().alias('dtNextBuy_avg'))
 
             #Resample to one minute bars, using the aggregations above
             resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg(aggregations)
@@ -338,6 +346,14 @@ def main():
                 pl.count('price').alias('num_events')
             ]
 
+            if df_name == 'Buys_trades':
+                aggregations.append(pl.col('pNextSell_tob').mean().alias('pNextSell_avg'))
+                aggregations.append(pl.col('dtNextSell_tob').mean().alias('dtNextSell_avg'))
+
+            if df_name == 'Sells_trades':
+                aggregations.append(pl.col('pNextBuy_tos').mean().alias('pNextBuy_avg'))
+                aggregations.append(pl.col('dtNextBuy_tos').mean().alias('dtNextBuy_avg'))
+                
             resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left', label='left').agg(aggregations)
 
             resampled_df = resampled_df.join(max_trades_per_sec, on='time', how='inner')
