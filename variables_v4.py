@@ -109,8 +109,8 @@ def main():
     #Find Opne-Close prices
     def auction_conditions(df):
         pl_df = pl.from_pandas(df)
-        special_conditions_df = pl_df.filter(pl.col('cond').str.contains('Q|O|5|M|6|9'))     #these codes correspond to opening and closing prices 
-        cleaned_df = pl_df.filter(~pl.col('cond').str.contains('Q|O|5|M|6|9'))      #now remove opening and closing prices from trades dataframe
+        special_conditions_df = pl_df.filter(pl.col('cond').str.contains('M|O|P|Q|5|6|9'))     #these codes correspond to opening and closing prices 
+        cleaned_df = pl_df.filter(~pl.col('cond').str.contains('M|O|P|Q|5|6|9'))               #now remove opening and closing prices from trades dataframe
         special_conditions_pd = special_conditions_df.select(['time', 'price', 'vol', 'EX', 'cond']).to_pandas()
         cleaned_df_pd = cleaned_df.to_pandas()
         return special_conditions_pd, cleaned_df_pd
@@ -140,7 +140,7 @@ def main():
         return np.corrcoef(x[:-lag], x[lag:])[0, 1]
     
     #Calculate the orderflow by Chordia, Hu, Subrahmanyam and Tong, MS 2019
-    def calculate_voib_shr(df1, df2):
+    def calculate_oib_shr(df1, df2):
         if df1 is None or df1.empty or df1.isna().all().all() or df2 is None or df2.empty or df2.isna().all().all():
             return None
         
@@ -181,8 +181,8 @@ def main():
             return None
         if pl_df.shape[0] == 1:
             return None
-        volatility_col_name = f'{df_name}_volatility'
-        autocorr_col_name = f'{df_name}_autocorr'
+        volatility_col_name = 'ret_volatility'
+        autocorr_col_name = 'ret_autocorr'
         resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
             pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
             pl.col(column).map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias(autocorr_col_name),
@@ -195,8 +195,8 @@ def main():
             return None
         if pl_df.shape[0] == 1:
             return None
-        volatility_col_name = f'{df_name}_volatility'
-        autocorr_col_name = f'{df_name}_autocorr'
+        volatility_col_name = 'ret_volatility'
+        autocorr_col_name = 'ret_autocorr'
         resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left').agg([
             pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
             pl.col(column).map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias(autocorr_col_name),
@@ -667,15 +667,22 @@ def main():
     print(f"Processing OIB statistics")
 
     # orderflow estimation from Buys and Sells
-    oib_shr_s = calculate_voib_shr(Buys_trades, Sells_trades)
-    if oib_shr_s is not None:
-        oib_shr_df = oib_shr_s.to_frame(name='OIB_SHR').reset_index()
-        oib_shr_df.columns = ['time', 'OIB_SHR']
-    else:
-        oib_shr_df = pd.DataFrame(columns=['time', 'OIB_SHR'])
+    trade_pairs = [
+        (Buys_trades, Sells_trades, "Orderflow"),
+        (Buys_Oddlot_trades, Sells_Oddlot_trades, "Orderflow_Oddlot")
+    ]
 
-    #Orderflow Statistics (based on the traded volume)
-    aggregated_data["Orderflow"] = reindex_to_full_time(apply_voib_shr_aggregations(oib_shr_df), args.base_date)
+    for buys_trades, sells_trades, key in trade_pairs:
+        # Calculate oib_shr
+        oib_shr_s = calculate_oib_shr(buys_trades, sells_trades)
+        if oib_shr_s is not None:
+            oib_shr_df = oib_shr_s.to_frame(name='OIB_SHR').reset_index()
+            oib_shr_df.columns = ['time', 'OIB_SHR']
+        else:
+            oib_shr_df = pd.DataFrame(columns=['time', 'OIB_SHR'])
+
+        # Calculate the orderflow statistics and store in the dictionary
+        aggregated_data[key] = reindex_to_full_time(apply_voib_shr_aggregations(oib_shr_df), args.base_date)
 
     end_process_OIB_time = time.time()
 
@@ -712,21 +719,14 @@ def main():
             (minutely_data['sum_of_squared_values'] / minutely_data['sum_of_values_squared']).alias('Herfindahl')
         ])
         
-        proportion_column_name = f'Herfindahl_{name}'
-        minutely_data = minutely_data.select([
-            'time', 'Herfindahl'
-        ]).rename({
-            'Herfindahl': proportion_column_name
-        })
-        
         aggregated_data[f"Herfindahl_{name}"] = reindex_to_full_time(minutely_data.to_pandas().set_index('time'), args.base_date)
 
 
     #Apply the Herfindahl Index for these dataframes
-    for df, name in zip([trades, Buys_trades, Sells_trades, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Ask, Bid], 
-                        ["trades", "Buys_trades", "Sells_trades", "Retail_trades", "Oddlot_trades", "Buys_Oddlot_trades", "Sells_Oddlot_trades", "Ask", "Bid"]):
+    for df, name in zip([trades, Ask, Bid], 
+                        ["trades", "Ask", "Bid"]):
         calculate_hindex(df, name)
-       
+    
     end_process_herfindahl_time = time.time()
 
     #Processing Midpoint, apply the function apply_midpoint_aggregations from above
@@ -868,21 +868,17 @@ def main():
                     #For variance ratio 1 the variances of 1 second and 5 second returns are divided
                     variance_ratio_df['variance_ratio2'] = np.abs((variance_ratio_df['variance_5s'] / (5 * variance_ratio_df['variance_1s'])) - 1)
                 if returns_df is trade_returns:
-                    variance_ratio_df.rename(columns={'variance_ratio': 'trade_ret_variance_ratio'}, inplace=True)
-                    aggregated_data["trade_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['trade_ret_variance_ratio'],  args.base_date)
+                    aggregated_data["trade_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
                     print(f"Variance ratio 1 was calculated for trade/price returns")
                     if ratios_1 is not None and not ratios_1.empty:
-                        variance_ratio_df.rename(columns={'variance_ratio2': 'trade_ret_variance_ratio2'}, inplace=True)
-                        aggregated_data["trade_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['trade_ret_variance_ratio2'],  args.base_date)
+                        aggregated_data["trade_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date)
                         print(f"Variance ratio 2 was calculated for trade/price returns")
 
                 else:
-                    variance_ratio_df.rename(columns={'variance_ratio': 'midprice_ret_variance_ratio'}, inplace=True)
-                    aggregated_data["midprice_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['midprice_ret_variance_ratio'],  args.base_date)
+                    aggregated_data["midprice_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
                     print(f"Variance ratio 1 was calculated for midprice returns")
                     if ratios_1 is not None and not ratios_1.empty:
-                        variance_ratio_df.rename(columns={'variance_ratio2': 'midprice_ret_variance_ratio2'}, inplace=True)
-                        aggregated_data["midprice_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['midprice_ret_variance_ratio2'],  args.base_date)
+                        aggregated_data["midprice_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date)
                         print(f"Variance ratio 2 was calculated for midprice returns")
                         
             else:
@@ -904,17 +900,16 @@ def main():
     
     #Split the saved datasets in aggregated data to datasets specific for trades, Buys_trades, Selld_trades, Retail trades ...
     categories = {
-        "Trades": {"trades", "Herfindahl_trades", "trade_returns", "trade_sign_stat", "trade_ret_variance_ratio", "trade_ret_variance_ratio2"},
-        "Buys_trades": {"Buys_trades", "Herfindahl_Buys_trades"},
-        "Sells_trades": {"Sells_trades", "Herfindahl_Sells_trades"},
-        "Retail_trades": {"Retail_trades", "Herfindahl_Retail_trades"},
-        "Oddlot_trades": {"Oddlot_trades", "Herfindahl_Oddlot_trades"},
-        "Buys_Oddlot_trades": {"Buys_Oddlot_trades", "Herfindahl_Buys_Oddlot_trades"},
-        "Sells_Oddlot_trades": {"Sells_Oddlot_trades", "Herfindahl_Sells_Oddlot_trades"},
+        "Trades": {"trades", "Herfindahl_trades", "Orderflow", "trade_returns", "trade_sign_stat", "trade_ret_variance_ratio", "trade_ret_variance_ratio2"},
+        "Buys_trades": {"Buys_trades"},
+        "Sells_trades": {"Sells_trades"},
+        "Retail_trades": {"Retail_trades"},
+        "Oddlot_trades": {"Oddlot_trades", "Orderflow_Oddlot"},
+        "Buys_Oddlot_trades": {"Buys_Oddlot_trades"},
+        "Sells_Oddlot_trades": {"Sells_Oddlot_trades"},
         "Ask": {"Ask", "Herfindahl_Ask"},
         "Bid": {"Bid", "Herfindahl_Bid"},
         "Midpoint": {"Midpoint", "midprice_returns", "nbbo_sign_stat", "midprice_ret_variance_ratio", "midprice_ret_variance_ratio2"},
-        "Orderflow": {"Orderflow"}
     }
 
     for category in categories:
@@ -944,9 +939,7 @@ def main():
             elif name in categories["Bid"]:
                 category = "Bid"
             elif name in categories["Midpoint"]:
-                category = "Midpoint"
-            elif name in categories["Orderflow"]:
-                category = "Orderflow"    
+                category = "Midpoint" 
             else:
                 continue  # If the name doesn't match any category, skip it
 
@@ -978,8 +971,6 @@ def main():
                 category = "Bid"
             elif name in categories["Midpoint"]:
                 category = "Midpoint"
-            elif name in categories["Orderflow"]:
-                category = "Orderflow"    
             else:
                 continue  # If the name doesn't match any category, skip it
 
