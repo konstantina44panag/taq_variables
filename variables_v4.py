@@ -399,7 +399,7 @@ def main():
                 
             #Find the trading halts, or news event indicator
             def encode_conditions_expr():
-                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKLMNOPQRSTVYZ124']), return_dtype=pl.Utf8)  #codes for trading halts and reopenings
+                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in 'DIJKLMNOPQRSTVYZ124' if c in x]), return_dtype=pl.Utf8)  #codes for trading halts and reopenings
             
             aggregations = [
                 pl.col('price').last().alias('last_price'),
@@ -457,7 +457,7 @@ def main():
 
             #Find the trading halts, or news event indicator
             def encode_conditions_expr():
-                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in x if c in 'DIJKLMNOPQRSTVYZ124']), return_dtype=pl.Utf8)
+                return pl.col('qu_cond').map_elements(lambda x: ''.join([c for c in 'DIJKLMNOPQRSTVYZ124' if c in x]), return_dtype=pl.Utf8)  #codes for trading halts and reopenings
             
             aggregations = [
                 pl.col('price').last().alias('last_price'),
