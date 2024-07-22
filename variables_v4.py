@@ -170,8 +170,8 @@ def main():
         pl_df = pl.from_pandas(df)
 
         resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
-        pl.col('OIB_SHR').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('OIB_volatility'),
-        pl.col('OIB_SHR').map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias('OIB_autocorr'),
+        pl.col('OIB_SHR').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('OIB_volatility_s'),
+        pl.col('OIB_SHR').map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias('OIB_autocorr_s'),
         ])
         return resampled_df.to_pandas().set_index('time')
             
@@ -182,11 +182,11 @@ def main():
         if pl_df.shape[0] == 1:
             return None
         if df_name is None:
-            volatility_col_name = 'ret_volatility'
-            autocorr_col_name = 'ret_autocorr'
+            volatility_col_name = 'ret_volatility_s'
+            autocorr_col_name = 'ret_autocorr_s'
         else:
-            volatility_col_name = f'ret_volatility_{df_name}'
-            autocorr_col_name = f'ret_autocorr_{df_name}'
+            volatility_col_name = f'ret_volatility_{df_name}_s'
+            autocorr_col_name = f'ret_autocorr_{df_name}_s'
 
         resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
             pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
@@ -195,13 +195,18 @@ def main():
         return resampled_df.to_pandas().set_index('time')
         
     #Calculate the variance and autocorrelation of returns outside trading hours          
-    def apply_return_aggregations_outside_trading(pl_df, column='returns',df_name=''):
+    def apply_return_aggregations_outside_trading(pl_df, column='returns', df_name=None):
         if pl_df is None or pl_df.shape[0] == 0:
             return None
         if pl_df.shape[0] == 1:
             return None
-        volatility_col_name = 'ret_volatility'
-        autocorr_col_name = 'ret_autocorr'
+        if df_name is None:
+            volatility_col_name = 'ret_volatility_s'
+            autocorr_col_name = 'ret_autocorr_s'
+        else:
+            volatility_col_name = f'ret_volatility_{df_name}_s'
+            autocorr_col_name = f'ret_autocorr_{df_name}_s'
+
         resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left').agg([
             pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
             pl.col(column).map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias(autocorr_col_name),
@@ -261,7 +266,7 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='1m', label='left').agg([
-                pl.col('count').max().alias('max_events_ps')
+                pl.col('count').max().alias('max_events_s')
             ])
 
             #Compute the VWAP
@@ -328,7 +333,7 @@ def main():
             
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='30m', label='left').agg([
-                pl.col('count').max().alias('max_events_ps')
+                pl.col('count').max().alias('max_events_s')
             ])
 
             #Compute the VWAP
@@ -391,7 +396,7 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='1m', label='left').agg([
-                pl.col('count').max().alias('max_events_ps')
+                pl.col('count').max().alias('max_events_s')
             ])
 
             #Compute the VWAP
@@ -453,7 +458,7 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='30m', label='left').agg([
-                pl.col('count').max().alias('max_events_ps')
+                pl.col('count').max().alias('max_events_s')
             ])
 
             #Compute the VWAP
@@ -510,7 +515,7 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='1m', label='left').agg([
-                pl.col('count').max().alias('max_events_ps')
+                pl.col('count').max().alias('max_events_s')
             ])
 
             #Count the number of events
@@ -544,7 +549,7 @@ def main():
 
             #Compute the variable: maximum events in the seconds per minute
             max_trades_per_sec = seconds_df.group_by_dynamic('time', every='30m', label='left').agg([
-                pl.col('count').max().alias('max_events_ps')
+                pl.col('count').max().alias('max_events_s')
             ])
 
             #Count the number of events
@@ -721,10 +726,10 @@ def main():
         ])
         
         minutely_data = minutely_data.with_columns([
-            (minutely_data['sum_of_squared_values'] / minutely_data['sum_of_values_squared']).alias('Herfindahl')
+            (minutely_data['sum_of_squared_values'] / minutely_data['sum_of_values_squared']).alias('Herfindahl_s')
         ])
         minutely_data = minutely_data.select([
-            'time', 'Herfindahl'
+            'time', 'Herfindahl_s'
         ])
         aggregated_data[f"Herfindahl_{name}"] = reindex_to_full_time(minutely_data.to_pandas().set_index('time'), args.base_date)
 
@@ -868,24 +873,24 @@ def main():
                 variance_ratio_df = pd.merge(ratios_5, ratios_15, left_index=True, right_index=True)
                 
                 #For variance ratio 1 the variances of 5 second and 15 second returns are divided
-                variance_ratio_df['variance_ratio'] = np.abs((variance_ratio_df['variance_15s'] / (3 * variance_ratio_df['variance_5s'])) - 1)
+                variance_ratio_df['variance_ratio_s'] = np.abs((variance_ratio_df['variance_15s'] / (3 * variance_ratio_df['variance_5s'])) - 1)
                 if ratios_1 is not None and not ratios_1.empty: 
                     variance_ratio_df = pd.merge(variance_ratio_df, ratios_1, left_index=True, right_index=True)
-                    
                     #For variance ratio 1 the variances of 1 second and 5 second returns are divided
-                    variance_ratio_df['variance_ratio2'] = np.abs((variance_ratio_df['variance_5s'] / (5 * variance_ratio_df['variance_1s'])) - 1)
+                    variance_ratio_df['variance_ratio2_s'] = np.abs((variance_ratio_df['variance_5s'] / (5 * variance_ratio_df['variance_1s'])) - 1)
+                    
                 if returns_df is trade_returns:
-                    aggregated_data["trade_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
+                    aggregated_data["trade_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['variance_ratio_s'],  args.base_date)
                     print(f"Variance ratio 1 was calculated for trade/price returns")
                     if ratios_1 is not None and not ratios_1.empty:
-                        aggregated_data["trade_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date)
+                        aggregated_data["trade_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2_s'],  args.base_date)
                         print(f"Variance ratio 2 was calculated for trade/price returns")
 
                 else:
-                    aggregated_data["midprice_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['variance_ratio'],  args.base_date)
+                    aggregated_data["midprice_ret_variance_ratio"] = reindex_to_full_time(variance_ratio_df['variance_ratio_s'],  args.base_date)
                     print(f"Variance ratio 1 was calculated for midprice returns")
                     if ratios_1 is not None and not ratios_1.empty:
-                        aggregated_data["midprice_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2'],  args.base_date)
+                        aggregated_data["midprice_ret_variance_ratio2"] = reindex_to_full_time(variance_ratio_df['variance_ratio2_s'],  args.base_date)
                         print(f"Variance ratio 2 was calculated for midprice returns")
                         
             else:
