@@ -150,7 +150,7 @@ def handle_duplicates(pl_df, key_col, value_cols, sum_col=None, other_cols=None,
 
 #def identify_retail: For finding the retail trades from the trades dataframe
 def identify_retail(z):
-            if 0 < z < 0.4 or 0.6 < z < 1:
+            if 0 < z :
                 return 'retail trade'
             else:
                 return 'non-retail trade'
