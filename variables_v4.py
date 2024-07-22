@@ -176,13 +176,18 @@ def main():
         return resampled_df.to_pandas().set_index('time')
             
     #Calculate the variance and autocorrelation of returns      
-    def apply_return_aggregations(pl_df, column='returns', df_name=''):
+    def apply_return_aggregations(pl_df, column='returns', df_name=None):
         if pl_df is None or pl_df.shape[0] == 0:
             return None
         if pl_df.shape[0] == 1:
             return None
-        volatility_col_name = 'ret_volatility'
-        autocorr_col_name = 'ret_autocorr'
+        if df_name is None:
+            volatility_col_name = 'ret_volatility'
+            autocorr_col_name = 'ret_autocorr'
+        else:
+            volatility_col_name = f'ret_volatility_{df_name}'
+            autocorr_col_name = f'ret_autocorr_{df_name}'
+
         resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
             pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
             pl.col(column).map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias(autocorr_col_name),
@@ -718,7 +723,9 @@ def main():
         minutely_data = minutely_data.with_columns([
             (minutely_data['sum_of_squared_values'] / minutely_data['sum_of_values_squared']).alias('Herfindahl')
         ])
-        
+        minutely_data = minutely_data.select([
+            'time', 'Herfindahl'
+        ])
         aggregated_data[f"Herfindahl_{name}"] = reindex_to_full_time(minutely_data.to_pandas().set_index('time'), args.base_date)
 
 
@@ -816,8 +823,8 @@ def main():
     trade_signs_1s_outside_trading = process_resample_data(trade_signs, '1s', args.base_date, outside_trading=True)
 
     #Create one minute timebars with statistics of the one second returns, such as variance and autocorrelation, for inside and outside trading hours
-    aggregated_data["trade_returns"] = reindex_to_full_time(apply_return_aggregations(trade_returns_1s, column='returns', df_name='trade_ret'), args.base_date)
-    aggregated_data["midprice_returns"] = reindex_to_full_time(apply_return_aggregations(midprice_returns_1s, column='returns', df_name='midprice_ret'),  args.base_date)
+    aggregated_data["trade_returns"] = reindex_to_full_time(apply_return_aggregations(trade_returns_1s, column='returns'), args.base_date)
+    aggregated_data["midprice_returns"] = reindex_to_full_time(apply_return_aggregations(midprice_returns_1s, column='returns'),  args.base_date)
     aggregated_data["nbbo_sign_stat"] = reindex_to_full_time(apply_return_aggregations(nbbo_signs_1s, column='returns', df_name='nbbo_sign'),  args.base_date)
     aggregated_data["trade_sign_stat"] = reindex_to_full_time(apply_return_aggregations(trade_signs_1s, column='returns', df_name='trade_sign'),  args.base_date)
     aggregated_data_outside_trading["trade_returns"] = reindex_to_full_time(apply_return_aggregations_outside_trading(trade_returns_1s_outside_trading, column='returns', df_name='trade_ret'),  args.base_date, outside_trading=True)
