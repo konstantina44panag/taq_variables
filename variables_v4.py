@@ -88,7 +88,7 @@ def main():
             print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
             return
 
-        trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result
+        trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Buys_Retail_trades, Sells_Retail_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result
 
     except NoTradesException:
         print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
@@ -633,6 +633,8 @@ def main():
         "Buys_trades": Buys_trades,
         "Sells_trades": Sells_trades,
         "Retail_trades": Retail_trades,
+        "Buys_Retail_trades": Buys_Retail_trades,
+        "Sells_Retail_trades": Sells_Retail_trades,
         "Oddlot_trades": Oddlot_trades,
         "Buys_Oddlot_trades": Buys_Oddlot_trades,
         "Sells_Oddlot_trades": Sells_Oddlot_trades
@@ -679,7 +681,9 @@ def main():
     # orderflow estimation from Buys and Sells
     trade_pairs = [
         (Buys_trades, Sells_trades, "Orderflow"),
-        (Buys_Oddlot_trades, Sells_Oddlot_trades, "Orderflow_Oddlot")
+        (Buys_Oddlot_trades, Sells_Oddlot_trades, "Orderflow_Oddlot"),
+        (Buys_Retail_trades, Sells_Retail_trades, "Orderflow_Retail")
+
     ]
 
     for buys_trades, sells_trades, key in trade_pairs:
@@ -915,7 +919,9 @@ def main():
         "Trades": {"trades", "Herfindahl_trades", "Orderflow", "trade_returns", "trade_sign_stat", "trade_ret_variance_ratio", "trade_ret_variance_ratio2"},
         "Buys_trades": {"Buys_trades"},
         "Sells_trades": {"Sells_trades"},
-        "Retail_trades": {"Retail_trades"},
+        "Retail_trades": {"Retail_trades", "Orderflow_Retail"},
+        "Buys_Retail_trades": {"Buys_Retail_trades"},
+        "Sells_Retail_trades": {"Sells_Retail_trades"},
         "Oddlot_trades": {"Oddlot_trades", "Orderflow_Oddlot"},
         "Buys_Oddlot_trades": {"Buys_Oddlot_trades"},
         "Sells_Oddlot_trades": {"Sells_Oddlot_trades"},
@@ -940,6 +946,10 @@ def main():
                 category = "Sells_trades"
             elif name in categories["Retail_trades"]:
                 category = "Retail_trades"
+            elif name in categories["Buys_Retail_trades"]:
+                category = "Buys_Retail_trades"
+            elif name in categories["Sells_Retail_trades"]:
+                category = "Sells_Retail_trades"
             elif name in categories["Oddlot_trades"]:
                 category = "Oddlot_trades"
             elif name in categories["Buys_Oddlot_trades"]:
@@ -971,6 +981,10 @@ def main():
                 category = "Sells_trades"
             elif name in categories["Retail_trades"]:
                 category = "Retail_trades"
+            elif name in categories["Buys_Retail_trades"]:
+                category = "Buys_Retail_trades"
+            elif name in categories["Sells_Retail_trades"]:
+                category = "Sells_Retail_trades"
             elif name in categories["Oddlot_trades"]:
                 category = "Oddlot_trades"
             elif name in categories["Buys_Oddlot_trades"]:
@@ -982,7 +996,7 @@ def main():
             elif name in categories["Bid"]:
                 category = "Bid"
             elif name in categories["Midpoint"]:
-                category = "Midpoint"
+                category = "Midpoint" 
             else:
                 continue  # If the name doesn't match any category, skip it
 

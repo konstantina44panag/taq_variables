@@ -9,6 +9,9 @@ import traceback
 from datetime import datetime
 import polars as pl
 from numba import njit
+from decimal import Decimal, getcontext
+getcontext().prec = 16
+
 pd.set_option('display.max_rows', 100)
 
 # Configure logging
@@ -149,12 +152,18 @@ def handle_duplicates(pl_df, key_col, value_cols, sum_col=None, other_cols=None,
     return result_df
 
 #def identify_retail: For finding the retail trades from the trades dataframe
-def identify_retail(z):
-            if 0 < z :
-                return 'retail trade'
-            else:
-                return 'non-retail trade'
 
+def identify_retail(z):
+    epsilon = 1e-10
+    if epsilon < z < 1 - epsilon :
+        return 'retail trade'
+    else:
+        return 'non-retail trade'
+def identify_retail_except(z):
+    if 0.4 < z < 0.6 :
+        return 'non-retail trade'
+    else:
+        return 'retail trade'
 #def calculate_returns_shift: For calculating returns 
 def calculate_returns_shift(df, price_col='price', time_col='time', additional_cols=[]):
  
@@ -452,9 +461,8 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Ask.sort_values(by="datetime", inplace=True)
         Bid.sort_values(by="datetime", inplace=True)
         Midpoint.sort_values(by="time", inplace=True) 
-
         trades.drop(columns=["time"], inplace=True)
-        trades.rename(columns={"datetime": "time"}, inplace=True)
+        trades.rename(columns={"datetime": "time", "time_org": "time_float"}, inplace=True)
         tradessigns.drop(columns=["time"], inplace=True)
         tradessigns.rename(columns={"datetime": "time", "time_org": "time_float"}, inplace=True)
         Ask.drop(columns=["time"], inplace=True)
@@ -518,10 +526,41 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Sells_trades['dtNextBuy_tos'] = Sells_trades['tNextBuy_tos'] - Sells_trades['time_float']
 
         #Define the Retail_trades dataframe
-        Retail_trades = trades.loc[trades["EX"] == "D"].copy()
-        Retail_trades['Z'] = 100 * (Retail_trades['price'] % 0.01)        
-        Retail_trades['trade_type'] = Retail_trades['Z'].apply(identify_retail)
-        Retail_trades = Retail_trades[Retail_trades['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
+        tradessigns['spread'] = tradessigns['ask'] - tradessigns['bid']
+        tradessigns['supbenny'] = tradessigns['price'] % 0.01 * 100
+
+        tradessigns_copy = tradessigns[tradessigns['EX'] == 'D'].copy()
+        tradessigns_copy = tradessigns_copy[tradessigns_copy['price'] != tradessigns_copy['midpoint']]
+        tradessigns_copy['correct_sign'] = tradessigns_copy['price'].between(tradessigns_copy['bid'], tradessigns_copy['ask'])
+
+        Retail_trades_except = tradessigns_copy[~tradessigns_copy['correct_sign'] | (tradessigns_copy['spread'] == 0.1)].copy()
+        Retail_trades_except['trade_type'] = Retail_trades_except['supbenny'].apply(identify_retail_except)
+        Retail_trades_except = Retail_trades_except[Retail_trades_except['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
+        Buys_Retail_trades_except = Retail_trades_except['supbenny'] < 0.04
+        Sells_Retail_trades_except = Retail_trades_except['supbenny'] > 0.06
+
+        Retail_trades_new = tradessigns_copy[tradessigns_copy['correct_sign'] & (tradessigns_copy['spread'] != 0.1)].copy()
+        Retail_trades_new['trade_type'] = Retail_trades_new['supbenny'].apply(identify_retail)
+        Retail_trades_new = Retail_trades_new[Retail_trades_new['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
+        Retail_trades_new['lower_bound'] = Retail_trades_new['bid'] + 0.4 * Retail_trades_new['spread']
+        Retail_trades_new['upper_bound'] =  Retail_trades_new['bid'] + 0.6 * Retail_trades_new['spread']
+        Retail_trades_new['can_be_signed'] = ~Retail_trades_new['price'].between(Retail_trades_new['lower_bound'], Retail_trades_new['upper_bound'])
+        Retail_trades_new = Retail_trades_new[(Retail_trades_new['can_be_signed'])]
+      
+        Buys_Retail_trades_new =  Retail_trades_new[Retail_trades_new['price'] > Retail_trades_new['midpoint']].copy()
+        Sells_Retail_trades_new = Retail_trades_new[Retail_trades_new['price'] < Retail_trades_new['midpoint']].copy()
+
+        Retail_trades_new = Buys_Retail_trades_new.drop(columns=['lower_bound', 'upper_bound', 'can_be_signed'])
+        Buys_Retail_trades_new = Buys_Retail_trades_new.drop(columns=['lower_bound', 'upper_bound', 'can_be_signed'])
+        Sells_Retail_trades_new = Sells_Retail_trades_new.drop(columns=['lower_bound', 'upper_bound', 'can_be_signed'])
+
+        Buys_Retail_trades = pd.concat([Buys_Retail_trades_except, Buys_Retail_trades_new])
+        Sells_Retail_trades = pd.concat([Sells_Retail_trades_except, Sells_Retail_trades_new])
+        Retail_trades = pd.concat([Retail_trades_except, Retail_trades_new])
+
+        Buys_Retail_trades.sort_values(by='time', inplace=True)
+        Sells_Retail_trades.sort_values(by='time', inplace=True)
+        Retail_trades.sort_values(by='time', inplace=True)
 
         #Define the Oddlot_trades dataframe
         target_date = datetime(2014, 1, 1)
@@ -540,7 +579,18 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trade_signs = tradessigns[
             ["time", "Initiator", "vol"]].copy()
         trade_signs.rename(columns={"Initiator": "returns"}, inplace=True)
-    
+
+        #Reset indices to the new dataframes
+        Buys_trades.reset_index(inplace = True)
+        Sells_trades.reset_index(inplace = True)
+        Retail_trades.reset_index(inplace = True)
+        Buys_Retail_trades.reset_index(inplace = True)
+        Sells_Retail_trades.reset_index(inplace = True)
+        Oddlot_trades.reset_index(inplace = True)
+        Buys_Oddlot_trades.reset_index(inplace = True)
+        Sells_Oddlot_trades.reset_index(inplace = True)
+        
+        Retail_trades.to_csv('Retail_trades.csv', index=False)
         #Write the time analysis
         if prep_analysis_path is not None:
             with open(prep_analysis_path, "a") as f:
@@ -555,7 +605,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
                 f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
                 f.write(f"TradeSigns time: {trsigns_time} seconds\n")
 
-        return trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs
+        return trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Buys_Retail_trades, Sells_Retail_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs
 
     except  NoTradesException:
         return None
