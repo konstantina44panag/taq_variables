@@ -533,13 +533,15 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         tradessigns_copy = tradessigns_copy[tradessigns_copy['price'] != tradessigns_copy['midpoint']]
         tradessigns_copy['correct_sign'] = tradessigns_copy['price'].between(tradessigns_copy['bid'], tradessigns_copy['ask'])
 
-        Retail_trades_except = tradessigns_copy[~tradessigns_copy['correct_sign'] | (tradessigns_copy['spread'] == 0.1)].copy()
+        mask = ~(tradessigns_copy['correct_sign']) & (tradessigns_copy['spread'] == 0.1)
+        inverse_mask = ~mask
+        Retail_trades_except = tradessigns_copy[mask].copy()
         Retail_trades_except['trade_type'] = Retail_trades_except['supbenny'].apply(identify_retail_except)
         Retail_trades_except = Retail_trades_except[Retail_trades_except['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
         Buys_Retail_trades_except = Retail_trades_except['supbenny'] < 0.04
         Sells_Retail_trades_except = Retail_trades_except['supbenny'] > 0.06
 
-        Retail_trades_new = tradessigns_copy[tradessigns_copy['correct_sign'] & (tradessigns_copy['spread'] != 0.1)].copy()
+        Retail_trades_new = tradessigns_copy[inverse_mask].copy()
         Retail_trades_new['trade_type'] = Retail_trades_new['supbenny'].apply(identify_retail)
         Retail_trades_new = Retail_trades_new[Retail_trades_new['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
         Retail_trades_new['lower_bound'] = Retail_trades_new['bid'] + 0.4 * Retail_trades_new['spread']
@@ -590,7 +592,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Buys_Oddlot_trades.reset_index(inplace = True)
         Sells_Oddlot_trades.reset_index(inplace = True)
         
-        Retail_trades.to_csv('Retail_trades.csv', index=False)
         #Write the time analysis
         if prep_analysis_path is not None:
             with open(prep_analysis_path, "a") as f:
