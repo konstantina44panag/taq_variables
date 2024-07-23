@@ -25,7 +25,7 @@ def get_midpoint(Ask,Bid,as_of):
     midpoint = (ask + bid)/2
     midpoint.loc[ask<bid] = np.nan
 
-    return midpoint.to_frame(name='midpoint')
+    return midpoint.to_frame(name='midpoint'), ask.to_frame(name='ask'), bid.to_frame(name='bid')
 
 
 def get_runs(x):
@@ -485,10 +485,13 @@ class TradeClassification:
         else:
             timecol = 'time'
 
-        midpoint = get_midpoint(self.Ask[[timecol,'price']].rename(columns={'time_inter':'time'}),
-                                self.Bid[[timecol,'price']].rename(columns={'time_inter':'time'}),
-                                self.df_tr[timecol].unique()
+        midpoint_only, ask, bid = get_midpoint(
+            self.Ask[[timecol, 'price']].rename(columns={'time_inter': 'time'}),
+            self.Bid[[timecol, 'price']].rename(columns={'time_inter': 'time'}),
+            self.df_tr[timecol].unique()
         )
+
+        midpoint = midpoint_only.merge(ask, left_index=True, right_index=True).merge(bid, left_index=True, right_index=True)
 
         self.df_tr = self.df_tr.merge(midpoint, left_on=timecol,right_index=True,how='left')
         
@@ -503,7 +506,6 @@ class TradeClassification:
         # tick rule
         self.apply_tick()
         self.df_tr.loc[self.df_tr.Step==0,'Step'] = 2
-
         return 
 
 
@@ -933,7 +935,7 @@ class TradeClassification:
         else:
             as_of = net.loc[start,tcol].values
 
-        midpoint = get_midpoint(self.Ask.rename(columns={tcol: 'time'}),self.Bid.rename(columns={tcol: 'time'}),as_of) 
+        midpoint, ask, bid = get_midpoint(self.Ask.rename(columns={tcol: 'time'}),self.Bid.rename(columns={tcol: 'time'}),as_of) 
         midpoint['group'] = net.group.unique()
         midpoint.set_index('group',inplace=True)
 
