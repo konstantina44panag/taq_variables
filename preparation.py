@@ -159,11 +159,17 @@ def identify_retail(z):
         return 'retail trade'
     else:
         return 'non-retail trade'
+    
 def identify_retail_except(z):
-    if 0.4 < z < 0.6 :
-        return 'non-retail trade'
+    epsilon = 1e-10
+    if epsilon < z < 1 - epsilon :
+        if z < 0.4 or z > 0.6 :
+            return 'retail trade'
+        else:
+            return 'non-retail trade' 
     else:
-        return 'retail trade'
+        return 'non-retail trade'
+    
 #def calculate_returns_shift: For calculating returns 
 def calculate_returns_shift(df, price_col='price', time_col='time', additional_cols=[]):
  
@@ -536,6 +542,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         mask = ~(tradessigns_copy['correct_sign']) & (tradessigns_copy['spread'] == 0.1)
         inverse_mask = ~mask
         Retail_trades_except = tradessigns_copy[mask].copy()
+        
         Retail_trades_except['trade_type'] = Retail_trades_except['supbenny'].apply(identify_retail_except)
         Retail_trades_except = Retail_trades_except[Retail_trades_except['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
         Buys_Retail_trades_except = Retail_trades_except['supbenny'] < 0.04
