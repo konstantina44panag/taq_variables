@@ -320,14 +320,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
             print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
             
-        #Cleaning step T2
-        pl_trades = pl_trades.filter(~pl_trades['cond'].str.contains('B|G|J|K|L|W|Z'))
-
-        #Check for empty dataframe after the cleaning step
-        if pl_trades.height == 0:
-            print(f"No trades after cleaning techniques for {stock_name}")
-            raise NoTradesException()
-        
         #Cleaning step T3
         pl_trades = handle_duplicates(pl_trades, key_col=['datetime'], value_cols=['price'], sum_col=['vol'], other_cols=['time', "corr"], join_col=['cond', "EX"])
 
@@ -462,15 +454,14 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trsigns_end_time = time.time()
         trsigns_time = trsigns_end_time - trsigns_start_time
 
-        trades.sort_values(by="datetime", inplace=True)
         tradessigns.sort_values(by='datetime', inplace=True)
         Ask.sort_values(by="datetime", inplace=True)
         Bid.sort_values(by="datetime", inplace=True)
         Midpoint.sort_values(by="time", inplace=True) 
-        trades.drop(columns=["time"], inplace=True)
-        trades.rename(columns={"datetime": "time", "time_org": "time_float"}, inplace=True)
+
         tradessigns.drop(columns=["time"], inplace=True)
         tradessigns.rename(columns={"datetime": "time", "time_org": "time_float"}, inplace=True)
+        trades = tradessigns.drop(columns=["midpoint", "ask", "bid"])
         Ask.drop(columns=["time"], inplace=True)
         Ask.rename(columns={"datetime": "time"}, inplace=True)
         Bid.drop(columns=["time"], inplace=True)

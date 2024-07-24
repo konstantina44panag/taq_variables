@@ -13,6 +13,10 @@ from datetime import datetime
 from statsmodels.tsa.stattools import acf
 from preparation import prepare_datasets, NoTradesException, NoNbbosException
 pd.set_option('display.max_rows', 300)
+
+class NoTradesException(Exception):
+    pass
+
 # Parse arguments
 parser = argparse.ArgumentParser(
     description="Prepare datasets for trade sign analysis and variable estimation."
@@ -616,15 +620,123 @@ def main():
             resampled_df = resampled_df.drop('vol')
         
         return resampled_df
+    
+    def process_daily(interval, df_interval, cond_char_set, is_cond=True):
+        def calculate_vwap(df):
+            if df.height == 0:
+                return 0.0
+            return (df['price'] * df['vol']).sum() / df['vol'].sum()
 
+        # Dictionaries to store the results
+        daily_inside = {}
+        daily_outside = {}
 
-    # Processing Trades
+        # Loop through both intervals: inside and outside
+        for interval_name, df_interval in zip(['inside', 'outside'], [df_filtered_inside, df_filtered_outside]):
+        
+            # Loop through characters in the set (condition or exchange)
+            for char in cond_char_set:
+                if char == '@':
+                    key = 'cond_at' if is_cond else 'vwap_ex_at'
+                elif char == '':
+                    key = 'cond_empty' if is_cond else 'vwap_ex_empty'
+                else:
+                    key = f'cond_{char}' if is_cond else f'vwap_ex_{char}'
 
-    #Apply the function for open /close prices
+                if char == '' and is_cond:
+                    df_filtered = df_interval.filter(pl.col('cond') == '')
+                else:
+                    df_filtered = df_interval.filter(pl.col('cond').str.contains(char))
+
+                vwap = calculate_vwap(df_filtered)
+                tot_vol = df_filtered['vol'].sum()
+                no_buys = df_filtered.filter(pl.col('Initiator') == 1).height
+                no_sells = df_filtered.filter(pl.col('Initiator') == -1).height
+
+                if interval_name == 'inside':
+                    if key not in daily_inside:
+                        daily_inside[key] = {}
+                    daily_inside[key]['vwap'] = vwap
+                    daily_inside[key]['tot_vol'] = tot_vol
+                    daily_inside[key]['no_buys'] = no_buys
+                    daily_inside[key]['no_sells'] = no_sells
+                else:
+                    if key not in daily_outside:
+                        daily_outside[key] = {}
+                    daily_outside[key]['vwap'] = vwap
+                    daily_outside[key]['tot_vol'] = tot_vol
+                    daily_outside[key]['no_buys'] = no_buys
+                    daily_outside[key]['no_sells'] = no_sells
+            if is_cond == False:
+                if interval_name == 'inside':
+                    daily_inside['tot_vol'] = df_interval['vol'].sum()
+                    daily_inside['no_buys'] = df_interval.filter(pl.col('Initiator') == 1).height
+                    daily_inside['no_sells'] = df_interval.filter(pl.col('Initiator') == -1).height
+                else:
+                    daily_outside['total_vol'] = df_interval['vol'].sum()
+                    daily_outside['no_buys'] = df_interval.filter(pl.col('Initiator') == 1).height
+                    daily_outside['no_sells'] = df_interval.filter(pl.col('Initiator') == -1).height
+
+        def flatten_dict(d, parent_key='', sep='_'):
+            items = []
+            for k, v in d.items():
+                new_key = f"{parent_key}{sep}{k}" if parent_key else k
+                if isinstance(v, dict):
+                    items.extend(flatten_dict(v, new_key, sep=sep).items())
+                else:
+                    items.append((new_key, v))
+            return dict(items)
+
+        flat_daily_inside = flatten_dict(daily_inside)
+        flat_daily_outside = flatten_dict(daily_outside)
+        
+        daily_inside_df = pd.DataFrame([flat_daily_inside])
+        daily_outside_df = pd.DataFrame([flat_daily_outside])
+        
+        return daily_inside_df, daily_outside_df
+    
+
+    #End of function definitions, computations follow
+   
+    #Process daily bars
+    exchanges_set = list('ABCDIJKMNPSTQVWXYZ')
+    conditions_set = [''] + list('@ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890')
+
+    if 'time' in trades.columns:
+            trades.set_index('time', inplace=True)
+
+    df_filtered_inside  = trades.between_time("09:30", "15:59:59").copy()
+    start_time_morning = f"{args.base_date} 09:30"
+    end_time_afternoon = f"{args.base_date} 16:00"
+    df_filtered_outside = trades[(trades.index < start_time_morning) | (trades.index >= end_time_afternoon)].copy()
+
+    trades.reset_index(inplace=True)
+    df_filtered_inside =  pl.from_pandas(df_filtered_inside)
+    df_filtered_outside = pl.from_pandas(df_filtered_outside)
+
+    daily_inside_df_cond, daily_outside_df_cond = process_daily('inside', df_filtered_inside, conditions_set, is_cond=True)
+    daily_inside_df_ex, daily_outside_df_ex = process_daily('inside', df_filtered_inside, exchanges_set, is_cond=False)
+
+    daily_inside_df = pd.concat([daily_inside_df_cond, daily_inside_df_ex], axis=1)
+    daily_outside_df = pd.concat([daily_outside_df_cond, daily_outside_df_ex], axis=1)
+
+    #Cleaning step T2, clear trade conditions after the computation of daily bars
+    
+    df = pl.from_pandas(trades)
+    df = df.filter(~df['cond'].str.contains('B|G|J|K|L|W|Z'))
+    trades = df.to_pandas()
+
+    #Check for empty dataframe after the cleaning step
+    if trades.empty:
+        raise NoTradesException(f"No trades after cleaning techniques for {args.stock_name}")
+
+    #Processing open /close auction prices
     start_auction_time = time.time()
     auction_conditions_df, trades = auction_conditions(trades)
     end_auction_time = time.time()
 
+    #Process 1-minute bars
+    # Processing Trades
     #For every trade dataframe, apply the function apply_aggregations from above
     start_process_trades_time = time.time()
 
@@ -1042,6 +1154,10 @@ def main():
     #Call saving function for groups daily_auction, inside_trading, outside_trading
     if auction_conditions_df is not None:
         process_and_save_df(auction_conditions_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_auction")
+    if daily_inside_df is not None:
+        process_and_save_df(daily_inside_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_trade_summary", "inside_trading")
+    if daily_outside_df is not None:
+        process_and_save_df(daily_outside_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_trade_summary", "outside_trading")
 
     for category in categories:
         df = eval(f"merged_{category}")
