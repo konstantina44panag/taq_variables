@@ -29,6 +29,8 @@ parser.add_argument("stock_name", type=str, help="Stock symbol.")
 parser.add_argument("year", type=str, help="Year of the data.")
 parser.add_argument("month", type=str, help="Month of the data.")
 parser.add_argument("day", type=str, help="Day of the data.")
+parser.add_argument("--method", type=str, help="Trade sign algorithm")
+parser.add_argument("--freq", type=int, help="Frequency of trade sign algorithm")
 parser.add_argument(
     "ctm_dataset_path",
     type=str,
@@ -80,6 +82,8 @@ def main():
             args.year,
             args.month,
             args.day,
+            args.method,
+            args.freq,
             args.ctm_dataset_path,
             args.complete_nbbo_dataset_path,
             args.hdf5_variable_path,

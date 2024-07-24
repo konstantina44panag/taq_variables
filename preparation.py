@@ -225,7 +225,7 @@ _ = rolling_median_exclude_self(dummy_data, 5)
 _ = rolling_mad_exclude_self(dummy_data, 5)
 
 #def prepare_datasets: Contains the loading of data to dataframes and applies the appropriate operations, this function is called by the python script variables_v4.py which then calculates variables
-def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path, prep_analysis_path=None, emp_analysis_path=None, var_analysis_path=None, prof_analysis_path=None):
+def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, method, freq, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path, prep_analysis_path=None, emp_analysis_path=None, var_analysis_path=None, prof_analysis_path=None):
     try:
         load_start_time = time.time()
 
@@ -450,18 +450,28 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         trsigns_start_time = time.time()
         logging.info("Estimating trade signs")
         analyzer = TradeAnalyzer(trades, Ask, Bid)
-        tradessigns = analyzer.classify_trades()
+        tradessigns = analyzer.classify_trades(method=method, freq=freq)
         trsigns_end_time = time.time()
         trsigns_time = trsigns_end_time - trsigns_start_time
 
-        tradessigns.sort_values(by='datetime', inplace=True)
+        trades.sort_values(by='datetime', inplace=True)
+        trades.drop(columns=["time"], inplace=True)
+        trades.rename(columns={"time_org": "time"}, inplace=True)
         Ask.sort_values(by="datetime", inplace=True)
         Bid.sort_values(by="datetime", inplace=True)
-        Midpoint.sort_values(by="time", inplace=True) 
+        Midpoint.sort_values(by="time", inplace=True)
+
+        tradessigns_retail = analyzer.classify_trades(method='lee_ready', freq= freq)
+        tradessigns.sort_values(by='datetime', inplace=True)
+        tradessigns_retail.sort_values(by='datetime', inplace=True)
+        Ask.sort_values(by="datetime", inplace=True)
+        Bid.sort_values(by="datetime", inplace=True)
 
         tradessigns.drop(columns=["time"], inplace=True)
         tradessigns.rename(columns={"datetime": "time", "time_org": "time_float"}, inplace=True)
-        trades = tradessigns.drop(columns=["midpoint", "ask", "bid"])
+        tradessigns_retail.drop(columns=["time"], inplace=True)
+        tradessigns_retail.rename(columns={"datetime": "time", "time_org": "time_float"}, inplace=True)
+        trades = tradessigns
         Ask.drop(columns=["time"], inplace=True)
         Ask.rename(columns={"datetime": "time"}, inplace=True)
         Bid.drop(columns=["time"], inplace=True)
@@ -523,23 +533,25 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, ct
         Sells_trades['dtNextBuy_tos'] = Sells_trades['tNextBuy_tos'] - Sells_trades['time_float']
 
         #Define the Retail_trades dataframe
-        tradessigns['spread'] = tradessigns['ask'] - tradessigns['bid']
-        tradessigns['supbenny'] = tradessigns['price'] % 0.01 * 100
+        tradessigns_retail['spread'] = tradessigns_retail['ask'] - tradessigns_retail['bid']
+        tradessigns_retail['supbenny'] = tradessigns_retail['price'] % 0.01 * 100
 
-        tradessigns_copy = tradessigns[tradessigns['EX'] == 'D'].copy()
-        tradessigns_copy = tradessigns_copy[tradessigns_copy['price'] != tradessigns_copy['midpoint']]
-        tradessigns_copy['correct_sign'] = tradessigns_copy['price'].between(tradessigns_copy['bid'], tradessigns_copy['ask'])
+        tradessigns_retail_copy = tradessigns_retail[tradessigns_retail['EX'] == 'D'].copy()
+        tradessigns_retail_copy = tradessigns_retail_copy[tradessigns_retail_copy['price'] != tradessigns_retail_copy['midpoint']]
+        tradessigns_retail_copy['correct_sign'] = tradessigns_retail_copy['price'].between(tradessigns_retail_copy['bid'], tradessigns_retail_copy['ask'])
 
-        mask = ~(tradessigns_copy['correct_sign']) & (tradessigns_copy['spread'] == 0.1)
+        mask = (~(tradessigns_retail_copy['correct_sign'])) & (tradessigns_retail_copy['spread'] == 0.1)
         inverse_mask = ~mask
-        Retail_trades_except = tradessigns_copy[mask].copy()
-        
+
+        #Old method of retail trades
+        Retail_trades_except = tradessigns_retail_copy[mask].copy()
         Retail_trades_except['trade_type'] = Retail_trades_except['supbenny'].apply(identify_retail_except)
         Retail_trades_except = Retail_trades_except[Retail_trades_except['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
         Buys_Retail_trades_except = Retail_trades_except['supbenny'] < 0.04
         Sells_Retail_trades_except = Retail_trades_except['supbenny'] > 0.06
 
-        Retail_trades_new = tradessigns_copy[inverse_mask].copy()
+        #New method of retail trades
+        Retail_trades_new = tradessigns_retail_copy[inverse_mask].copy()
         Retail_trades_new['trade_type'] = Retail_trades_new['supbenny'].apply(identify_retail)
         Retail_trades_new = Retail_trades_new[Retail_trades_new['trade_type'] == 'retail trade'].drop(columns=['trade_type'])
         Retail_trades_new['lower_bound'] = Retail_trades_new['bid'] + 0.4 * Retail_trades_new['spread']

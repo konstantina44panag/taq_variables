@@ -15,7 +15,6 @@
 #For the original hdf5 the folder "test_hdf5" should be changed to "raw_hdf5"
 #Lines 57-65, the paths of the remaining files are set to the current directory where the program runs
 #Lines 56 -65 can change directories
-
 set -eu
 export RUST_BACKTRACE=full
 
@@ -44,12 +43,30 @@ done
 # Skip over the second '--' delimiter
 shift
 
-# Remaining arguments are stocks
-stocks=("$@")
+# Check for optional method and freq arguments
+method="ds_2"
+freq=3
+
+# Check if there are any remaining arguments (optional method and freq)
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --method)
+            method=$2
+            shift 2
+            ;;
+        --freq)
+            freq=$2
+            shift 2
+            ;;
+        *)
+            stocks+=("$1")
+            shift
+            ;;
+    esac
+done
 
 # Get the current directory
 current_dir=$(pwd)
-
 # Common filenames from github, across all machines
 hdf5OriginalFileName="${year}${month}.h5"
 pythonScriptName="variables_v4.py"
@@ -157,8 +174,7 @@ if [ -f "$hdf5OriginalFile" ]; then
                 complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/"
                 echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day"
                 #pass the arguments to the python script
-                python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis
-                echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5OriginalFile"
+                python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day --method $method --freq $freq $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis                echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5OriginalFile"
             else
                 echo "The $stock was not traded on ${month}-${year}-${day}"
             fi
