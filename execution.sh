@@ -79,7 +79,7 @@ emptyVariablesName="empty_bars.txt"
 
 # Determine the base path and other paths based on the path_type argument
 if [ "$machine" == "REG" ]; then
-    hdf5OriginalFilePath="/mnt/e/repository/data/taq/processed/test_hdf5/"
+    hdf5OriginalFilePath="/mnt/e/repository/data/taq/processed/raw_hdf5/"
     hdf5VariableFilePath="$current_dir/"
     pythonScriptPath="$current_dir/"
     excludeStocksFilePath="$current_dir/"
@@ -174,7 +174,8 @@ if [ -f "$hdf5OriginalFile" ]; then
                 complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/"
                 echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day"
                 #pass the arguments to the python script
-                python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day --method $method --freq $freq $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis                echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5OriginalFile"
+                python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day --method $method --freq $freq $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis 
+                echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5OriginalFile"
             else
                 echo "The $stock was not traded on ${month}-${year}-${day}"
             fi

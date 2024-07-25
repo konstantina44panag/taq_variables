@@ -356,7 +356,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         pl_nbbos = handle_duplicates(pl_nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
 
         #Cleaning Step Q2
-        pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] >= pl_nbbos['BEST_BID'])
+        pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] > pl_nbbos['BEST_BID'])
         
         if pl_nbbos.height == 0:
             print(f"No nbbos after cleaning techniques for {stock_name}")
@@ -484,10 +484,10 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         def find_next_initiator_numba(times, prices, initiators):
             n = len(times)
 
-            tNextSell_tob = np.full(n, np.nan)
-            pNextSell_tob = np.full(n, np.nan)
-            tNextBuy_tos = np.full(n, np.nan)
-            pNextBuy_tos = np.full(n, np.nan)
+            tNextSell_tob = np.full(n, 0.00)
+            pNextSell_tob = np.full(n, 0.00)
+            tNextBuy_tos = np.full(n, 0.00)
+            pNextBuy_tos = np.full(n, 0.00)
 
             for i in range(n):
                 if initiators[i] == 1:
@@ -535,7 +535,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         #Define the Retail_trades dataframe
         tradessigns_retail['spread'] = tradessigns_retail['ask'] - tradessigns_retail['bid']
         tradessigns_retail['supbenny'] = tradessigns_retail['price'] % 0.01 * 100
-
+        
         tradessigns_retail_copy = tradessigns_retail[tradessigns_retail['EX'] == 'D'].copy()
         tradessigns_retail_copy = tradessigns_retail_copy[tradessigns_retail_copy['price'] != tradessigns_retail_copy['midpoint']]
         tradessigns_retail_copy['correct_sign'] = tradessigns_retail_copy['price'].between(tradessigns_retail_copy['bid'], tradessigns_retail_copy['ask'])
