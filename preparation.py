@@ -450,7 +450,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         trsigns_start_time = time.time()
         logging.info("Estimating trade signs")
         analyzer = TradeAnalyzer(trades, Ask, Bid)
-        tradessigns = analyzer.classify_trades(method=method, freq=freq)
+        tradessigns = analyzer.classify_trades()
         trsigns_end_time = time.time()
         trsigns_time = trsigns_end_time - trsigns_start_time
 

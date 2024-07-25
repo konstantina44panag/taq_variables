@@ -193,8 +193,8 @@ def main():
             volatility_col_name = 'ret_volatility_s'
             autocorr_col_name = 'ret_autocorr_s'
         else:
-            volatility_col_name = f'ret_volatility_{df_name}_s'
-            autocorr_col_name = f'ret_autocorr_{df_name}_s'
+            volatility_col_name = f'sign_volatility_s'
+            autocorr_col_name = f'sign_autocorr_s'
 
         resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left').agg([
             pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
@@ -212,8 +212,8 @@ def main():
             volatility_col_name = 'ret_volatility_s'
             autocorr_col_name = 'ret_autocorr_s'
         else:
-            volatility_col_name = f'ret_volatility_{df_name}_s'
-            autocorr_col_name = f'ret_autocorr_{df_name}_s'
+            volatility_col_name = f'sign_volatility_s'
+            autocorr_col_name = f'sign_autocorr_s'
 
         resampled_df = pl_df.group_by_dynamic('time', every='30m', closed='left').agg([
             pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
@@ -673,10 +673,12 @@ def main():
                     daily_outside[key]['no_sells'] = no_sells
             if is_cond == False:
                 if interval_name == 'inside':
+                    daily_inside['vwap'] = calculate_vwap(df_interval)
                     daily_inside['tot_vol'] = df_interval['vol'].sum()
                     daily_inside['no_buys'] = df_interval.filter(pl.col('Initiator') == 1).height
                     daily_inside['no_sells'] = df_interval.filter(pl.col('Initiator') == -1).height
                 else:
+                    daily_outside['vwap'] = calculate_vwap(df_interval)
                     daily_outside['total_vol'] = df_interval['vol'].sum()
                     daily_outside['no_buys'] = df_interval.filter(pl.col('Initiator') == 1).height
                     daily_outside['no_sells'] = df_interval.filter(pl.col('Initiator') == -1).height
@@ -1157,7 +1159,7 @@ def main():
 
     #Call saving function for groups daily_auction, inside_trading, outside_trading
     if auction_conditions_df is not None:
-        process_and_save_df(auction_conditions_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_auction")
+        process_and_save_df(auction_conditions_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_auction_summary")
     if daily_inside_df is not None:
         process_and_save_df(daily_inside_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_trade_summary", "inside_trading")
     if daily_outside_df is not None:
