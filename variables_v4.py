@@ -133,16 +133,17 @@ def main():
 
     #Cleaning step T2, clear trade conditions after the computation of daily bars
     
-    df = pl.from_pandas(trades)
-    df = df.filter(~df['cond'].str.contains('B|G|J|K|L|W|Z'))
-    trades = df.to_pandas()
+    pl_trades = pl.from_pandas(trades)
+    pl_trades = pl_trades.filter(~pl_trades['cond'].str.contains('B|G|J|K|L|W|Z'))
+    
     #Check for empty dataframe after the cleaning step
-    if trades.empty:
-        raise NoTradesException(f"No trades after cleaning techniques for {args.stock_name}")
-
+    if pl_trades.height == 0:
+        print(f"No trades after cleaning techniques for {args.stock_name}")
+        raise NoTradesException()
+    
     #Processing open /close auction prices
     start_auction_time = time.time()
-    auction_conditions_df, trades = auction_conditions(trades)
+    auction_conditions_df, trades = auction_conditions(pl_trades)
     end_auction_time = time.time()
 
     #Process 1-minute bars
@@ -195,10 +196,10 @@ def main():
     start_process_OIB_time = time.time()
     # orderflow estimation from Buys and Sells
     trade_pairs = [
-    #    (Buys_trades, Sells_trades, "Orderflow_Trades"),
-    #    (Buys_Oddlot_trades, Sells_Oddlot_trades, "Orderflow_Oddlot"),
+        (Buys_trades, Sells_trades, "Orderflow_Trades"),
+        (Buys_Oddlot_trades, Sells_Oddlot_trades, "Orderflow_Oddlot"),
         (Buys_Retail_trades, Sells_Retail_trades, "Orderflow_Retail"),
-    #    (Bid, Ask, "Orderflow_Quotes")
+        (Bid, Ask, "Orderflow_Quotes")
     ]
 
     for df1, df2, key in trade_pairs:
@@ -209,8 +210,8 @@ def main():
         df1_filtered = df1.between_time("09:30", "15:59:59").copy()
         df2_filtered = df2.between_time("09:30", "15:59:59").copy()
         oib_df = calculate_oib_metrics(df1_filtered, df2_filtered, args.base_date)
-        # Calculate the orderflow statistics and store in the dictionary
-        aggregated_data[key] = reindex_to_full_time(apply_oib_aggregations(oib_df), args.base_date)
+        oib_statistics = apply_oib_aggregations(oib_df)
+        aggregated_data[key] = reindex_to_full_time(oib_statistics, args.base_date)
 
     end_process_OIB_time = time.time()
 
@@ -219,8 +220,8 @@ def main():
     #Apply the Herfindahl Index for these dataframes
     for df, name in zip([trades, Ask, Bid], 
                         ["trades", "Ask", "Bid"]):
-        herfindahl = calculate_Herfindahl(df, name)
-        aggregated_data[f"Herfindahl_{name}"] = reindex_to_full_time(herfindahl.to_pandas().set_index('time'), args.base_date)
+        herfindahl = calculate_Herfindahl(df)
+        aggregated_data[f"Herfindahl_{name}"] = reindex_to_full_time(herfindahl, args.base_date)
 
     end_process_herfindahl_time = time.time()
 
@@ -261,7 +262,6 @@ def main():
     for name, df in quote_dataframes_to_process.items():
         if df is None or df.empty or df.isna().all().all():
             continue
-            
         if 'time' in df.columns:
             df.set_index('time', inplace=True)
       
@@ -306,16 +306,16 @@ def main():
 
     #Create one minute timebars with statistics of the one second returns, such as variance and autocorrelation, for inside and outside trading hours
     aggregated_data["trade_returns"] = reindex_to_full_time(apply_return_aggregations(trade_returns_1s, column='returns'), args.base_date)
-    aggregated_data["trade_sign_stat"] = reindex_to_full_time(apply_return_aggregations(trade_signs_1s, column='returns', df_name='trade_sign'),  args.base_date)
+    aggregated_data["trade_signs"] = reindex_to_full_time(apply_return_aggregations(trade_signs_1s, column='returns',sign=True),  args.base_date)
 
     aggregated_data["midprice_returns"] = reindex_to_full_time(apply_return_aggregations(midprice_returns_1s, column='returns'),  args.base_date)
-    aggregated_data["nbbo_sign_stat"] = reindex_to_full_time(apply_return_aggregations(nbbo_signs_1s, column='returns', df_name='nbbo_sign'),  args.base_date)
+    aggregated_data["nbbo_signs"] = reindex_to_full_time(apply_return_aggregations(nbbo_signs_1s, column='returns', sign=True),  args.base_date)
     
     aggregated_data_outside_trading["trade_returns"] = reindex_to_full_time(apply_return_aggregations(trade_returns_1m_outside_trading, column='returns', outside_trading=True),  args.base_date, outside_trading=True)
-    aggregated_data_outside_trading["trade_sign_stat"] = reindex_to_full_time(apply_return_aggregations(trade_signs_1m_outside_trading, column='returns', df_name='trade_sign', outside_trading=True),  args.base_date, outside_trading=True)
+    aggregated_data_outside_trading["trade_signs"] = reindex_to_full_time(apply_return_aggregations(trade_signs_1m_outside_trading, column='returns', sign=True, outside_trading=True),  args.base_date, outside_trading=True)
 
     aggregated_data_outside_trading["midprice_returns"] = reindex_to_full_time(apply_return_aggregations(midprice_returns_1m_outside_trading, column='returns', outside_trading=True),  args.base_date, outside_trading=True)
-    aggregated_data_outside_trading["nbbo_sign_stat"] = reindex_to_full_time(apply_return_aggregations(nbbo_signs_1m_outside_trading, column='returns', df_name='nbbo_sign', outside_trading=True),  args.base_date, outside_trading=True)
+    aggregated_data_outside_trading["nbbo_signs"] = reindex_to_full_time(apply_return_aggregations(nbbo_signs_1m_outside_trading, column='returns', sign=True, outside_trading=True),  args.base_date, outside_trading=True)
     
     end_process_returns_time = time.time()
 
@@ -364,13 +364,9 @@ def main():
 
     write_start_time = time.time()
     
-    # Function to merge dataframes on time index
-    def merge_dataframes(df1, df2):
-        return pd.merge(df1, df2, left_index=True, right_index=True, how='outer')
-    
     #Split the saved datasets in aggregated data to datasets specific for trades, Buys_trades, Selld_trades, Retail trades ...
     categories = {
-        "Trades": {"trades", "Herfindahl_trades", "Orderflow_Trades", "trade_returns", "trade_sign_stat", "trade_vr", "trade_vr2"},
+        "Trades": {"trades", "Herfindahl_trades", "Orderflow_Trades", "trade_returns", "trade_signs", "trade_vr", "trade_vr2"},
         "Buys_trades": {"Buys_trades"},
         "Sells_trades": {"Sells_trades"},
         "Retail_trades": {"Retail_trades", "Orderflow_Retail"},
@@ -381,85 +377,30 @@ def main():
         "Sells_Oddlot_trades": {"Sells_Oddlot_trades"},
         "Ask": {"Ask", "Herfindahl_Ask"},
         "Bid": {"Bid", "Herfindahl_Bid"},
-        "Midpoint": {"Midpoint", "midprice_returns", "nbbo_sign_stat", "midprice_vr", "midprice_vr2", "Orderflow_Quotes"},
+        "Midpoint": {"Midpoint", "Orderflow_Quotes", "midprice_returns", "nbbo_signs", "midprice_vr", "midprice_vr2"},
     }
 
-    for category in categories:
+    def merge_dataframes(df1, df2):
+        return pd.merge(df1, df2, left_index=True, right_index=True, how='outer')
+    
+    #Merge data of the same category
+    merged_data = {category: pd.DataFrame() for category in categories}
+    merged_outside_trading_data = {category: pd.DataFrame() for category in categories}   
+    for category, names in categories.items():
         print(category)
-        exec(f"merged_{category} = pd.DataFrame()")
-        exec(f"merged_outside_trading_{category} = pd.DataFrame()")
-
-
-    for name, df in aggregated_data.items():
-        if df is not None and not df.isna().all().all():
-            if name in categories["Trades"]:
-                category = "Trades"
-            elif name in categories["Buys_trades"]:
-                category = "Buys_trades"
-            elif name in categories["Sells_trades"]:
-                category = "Sells_trades"
-            elif name in categories["Retail_trades"]:
-                category = "Retail_trades"
-            elif name in categories["Buys_Retail_trades"]:
-                category = "Buys_Retail_trades"
-            elif name in categories["Sells_Retail_trades"]:
-                category = "Sells_Retail_trades"
-            elif name in categories["Oddlot_trades"]:
-                category = "Oddlot_trades"
-            elif name in categories["Buys_Oddlot_trades"]:
-                category = "Buys_Oddlot_trades"
-            elif name in categories["Sells_Oddlot_trades"]:
-                category = "Sells_Oddlot_trades"
-            elif name in categories["Ask"]:
-                category = "Ask"
-            elif name in categories["Bid"]:
-                category = "Bid"
-            elif name in categories["Midpoint"]:
-                category = "Midpoint" 
-            else:
-                continue  # If the name doesn't match any category, skip it
-
-        # Merge dataframes if the consolidated dataframe for the category is not empty, else assign df to it
-            if eval(f"not merged_{category}.empty"):
-                exec(f"merged_{category} = merge_dataframes(merged_{category}, df)")
-            else:
-                exec(f"merged_{category} = df")
-
-    for name, df in aggregated_data_outside_trading.items():
-        if df is not None and not df.isna().all().all():
-            if name in categories["Trades"]:
-                category = "Trades"
-            elif name in categories["Buys_trades"]:
-                category = "Buys_trades"
-            elif name in categories["Sells_trades"]:
-                category = "Sells_trades"
-            elif name in categories["Retail_trades"]:
-                category = "Retail_trades"
-            elif name in categories["Buys_Retail_trades"]:
-                category = "Buys_Retail_trades"
-            elif name in categories["Sells_Retail_trades"]:
-                category = "Sells_Retail_trades"
-            elif name in categories["Oddlot_trades"]:
-                category = "Oddlot_trades"
-            elif name in categories["Buys_Oddlot_trades"]:
-                category = "Buys_Oddlot_trades"
-            elif name in categories["Sells_Oddlot_trades"]:
-                category = "Sells_Oddlot_trades"
-            elif name in categories["Ask"]:
-                category = "Ask"
-            elif name in categories["Bid"]:
-                category = "Bid"
-            elif name in categories["Midpoint"]:
-                category = "Midpoint" 
-            else:
-                continue  # If the name doesn't match any category, skip it
-
-        # Merge dataframes if the consolidated dataframe for the category is not empty, else assign df to it
-            if eval(f"not merged_outside_trading_{category}.empty"):
-                exec(f"merged_outside_trading_{category} = merge_dataframes(merged_outside_trading_{category}, df)")
-            else:
-                exec(f"merged_outside_trading_{category} = df")
-
+        for name, df in aggregated_data.items():
+            if name in names and df is not None and not df.isna().all().all():
+                if not merged_data[category].empty:
+                    merged_data[category] = merge_dataframes(merged_data[category], df)
+                else:
+                    merged_data[category] = df
+        for name, df in aggregated_data_outside_trading.items():
+            if name in names and df is not None and not df.isna().all().all():
+                if not merged_outside_trading_data[category].empty:
+                    merged_outside_trading_data[category] = merge_dataframes(merged_outside_trading_data[category], df)
+                else:
+                    merged_outside_trading_data[category] = df
+    
 
     #Function for saving the variable datasets in a new HDF5 file
     def process_and_save_df(df, hdf5_variable_path, stock_name, day, month, year, time_range_name, category_name=None):
@@ -501,18 +442,17 @@ def main():
     if daily_outside_df is not None:
         process_and_save_df(daily_outside_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_trade_summary", "outside_trading")
 
-    for category in categories:
-        df = eval(f"merged_{category}")
+    for category, df in merged_data.items():
         if df is not None:
             df.reset_index(inplace=True)
             df.rename(columns={'index': 'time'}, inplace=True)
             process_and_save_df(df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "inside_trading", category)
 
-        df_outside = eval(f"merged_outside_trading_{category}")
-        if df_outside is not None:
-            df_outside.reset_index(inplace=True)
-            df_outside.rename(columns={'index': 'time'}, inplace=True)
-            process_and_save_df(df_outside, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "outside_trading", category)
+    for category, df in merged_outside_trading_data.items():
+        if df is not None:
+            df.reset_index(inplace=True)
+            df.rename(columns={'index': 'time'}, inplace=True)
+            process_and_save_df(df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "outside_trading", category)
 
         write_end_time = time.time()
 

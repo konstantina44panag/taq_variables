@@ -10,9 +10,8 @@ from datetime import timedelta
 from datetime import datetime
 from statsmodels.tsa.stattools import acf
 
-
-def auction_conditions(df):
-    pl_df = pl.from_pandas(df)
+#Separate opening and closing prices from the variable calculation, will be saved in daily auction group
+def auction_conditions(pl_df):
     special_conditions_df = pl_df.filter(pl.col('cond').str.contains('M|O|P|Q|5|6|9'))     #these codes correspond to opening and closing prices 
     cleaned_df = pl_df.filter(~pl.col('cond').str.contains('M|O|P|Q|5|6|9'))               #now remove opening and closing prices from trades dataframe
     special_conditions_pd = special_conditions_df.select(['time', 'price', 'vol', 'EX', 'cond']).to_pandas()
@@ -128,13 +127,13 @@ def apply_oib_aggregations(df):
     return resampled_df.to_pandas().set_index('time')
         
 #Calculate the variance and autocorrelation of returns      
-def apply_return_aggregations(pl_df, column='returns', df_name=None, outside_trading=False):
+def apply_return_aggregations(pl_df, column='returns', sign=False, outside_trading=False):
     if pl_df is None or pl_df.shape[0] == 0:
         return None
     if pl_df.shape[0] == 1:
         return None
 
-    if df_name is None:
+    if sign is False:
         volatility_col_name = 'ret_volatility_s' if not outside_trading else 'ret_volatility_m'
         autocorr_col_name = 'ret_autocorr_s' if not outside_trading else 'ret_autocorr_m'
     else:
@@ -476,7 +475,7 @@ def process_daily(df_filtered_inside, df_filtered_outside, cond_char_set, is_con
     
     return daily_inside_df, daily_outside_df
 
-def calculate_Herfindahl(df, name):
+def calculate_Herfindahl(df):
     if df is None or df.empty or df.isna().all().all():
         return None
     if 'time' in df.columns:
@@ -489,22 +488,23 @@ def calculate_Herfindahl(df, name):
     pl_df = pl.from_pandas(df_filtered.reset_index())
     
     resampled = pl_df.group_by_dynamic('time', every='1s', closed='left', label='left').agg([
-        pl.col('value').sum().alias('sum_of_values'),
-        (pl.col('value')**2).sum().alias('sum_of_squared_values')
+        pl.col('value').sum().alias('sum'),
+        (pl.col('value')**2).sum().alias('sum_of_squared')
     ])
     
     minutely_data = resampled.group_by_dynamic('time', every='1m', closed='left', label='left').agg([
-        pl.col('sum_of_values').sum(),
-        pl.col('sum_of_squared_values').sum()
+        pl.col('sum').sum().alias('double_sum'),
+        pl.col('sum_of_squared').sum().alias('double_sum_of_squared')
     ])
     minutely_data = minutely_data.with_columns([
-        (minutely_data['sum_of_values']**2).alias('sum_of_values_squared')
+        (minutely_data['double_sum']**2).alias('sq_double_sum')
     ])
     
     minutely_data = minutely_data.with_columns([
-        (minutely_data['sum_of_squared_values'] / minutely_data['sum_of_values_squared']).alias('Herfindahl_s')
+        (minutely_data['double_sum_of_squared'] / minutely_data['sq_double_sum']).alias('Herfindahl_s')
     ])
     minutely_data = minutely_data.select([
         'time', 'Herfindahl_s'
     ])
+    minutely_data = minutely_data.to_pandas().set_index('time')
     return minutely_data
