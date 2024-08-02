@@ -174,7 +174,6 @@ def main():
  
         if not df_filtered.empty:
             try:
-                print(f"Processing {name} DataFrame")
                 agg_df = apply_aggregations(df_filtered, name)
                 aggregated_data[name] = reindex_to_full_time(agg_df, args.base_date)                
             except KeyError as e:
@@ -183,7 +182,6 @@ def main():
 
         if not df_filtered_outside.empty:
             try:
-                print(f"Processing {name} DataFrame outside trading hours")
                 agg_df_outside_trading = apply_aggregations(df_filtered_outside, name, outside_trading=True)
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
@@ -238,7 +236,6 @@ def main():
         
         if not df_filtered.empty:
             try:
-                print(f"Processing Midpoint DataFrame")
                 midpoint_agg_df = apply_midpoint_aggregations(df_filtered)
                 aggregated_data["Midpoint"] = reindex_to_full_time(midpoint_agg_df, args.base_date)
             except KeyError as e:
@@ -246,7 +243,6 @@ def main():
 
         if not df_filtered_outside.empty:
             try:
-                print(f"Processing Midpoint DataFrame outside trading hours")
                 midpoint_agg_df_outside_trading = apply_midpoint_aggregations(df_filtered_outside, outside_trading=True)
                 aggregated_data_outside_trading["Midpoint"] = reindex_to_full_time(midpoint_agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
@@ -272,7 +268,6 @@ def main():
 
         if not df_filtered.empty:
             try:
-                print(f"Processing {name} DataFrame")
                 agg_df = apply_quote_aggregations(df_filtered, name)
                 aggregated_data[name] = reindex_to_full_time(agg_df,  args.base_date)          
             except KeyError as e:
@@ -281,7 +276,6 @@ def main():
 
         if not df_filtered_outside.empty:
             try:
-                print(f"Processing {name} DataFrame outside trading hours")
                 agg_df_outside_trading = apply_quote_aggregations(df_filtered_outside, name, outside_trading=True)
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading,  args.base_date, outside_trading=True)
             except KeyError as e:
@@ -363,7 +357,6 @@ def main():
     main_end_time = time.time()
 
     write_start_time = time.time()
-    
     #Split the saved datasets in aggregated data to datasets specific for trades, Buys_trades, Selld_trades, Retail trades ...
     categories = {
         "Trades": {"trades", "Herfindahl_trades", "Orderflow_Trades", "trade_returns", "trade_signs", "trade_vr", "trade_vr2"},
@@ -387,7 +380,6 @@ def main():
     merged_data = {category: pd.DataFrame() for category in categories}
     merged_outside_trading_data = {category: pd.DataFrame() for category in categories}   
     for category, names in categories.items():
-        print(category)
         for name, df in aggregated_data.items():
             if name in names and df is not None and not df.isna().all().all():
                 if not merged_data[category].empty:
@@ -423,13 +415,11 @@ def main():
                 if category_name:
                     hdf5_key += f"/{category_name}"
                 store.append(hdf5_key, df, format="table", data_columns=True, index=False)
-                print(f"Data successfully saved to HDF5 key: {hdf5_key}")
         else:
             message = f"{stock_name} has empty time bars for {day}/{month}/{year} and category: {category_name} {time_range_name}.\n"         
             try:
                 with open(args.emp_analysis_path, "a") as f:
                     f.write(message)
-                print(f"Message written to {args.emp_analysis_path}")
             except IOError as e:
                 print(f"An error occurred while writing to the file: {e}")
 
@@ -487,7 +477,6 @@ if __name__ == "__main__":
                 f.write(f"\nStock: {args.stock_name}\n")
                 ps = pstats.Stats(pr, stream=f)
                 ps.strip_dirs().sort_stats(pstats.SortKey.CUMULATIVE).print_stats()
-            print(f"Profiling data written to {args.prof_analysis_path}")  # Confirm profiling data is written
         except IOError as e:
             print(f"An error occurred while writing the profiling data: {e}")
     else:

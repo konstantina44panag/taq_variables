@@ -88,8 +88,6 @@ def calculate_oib_metrics(df1_filtered, df2_filtered, base_date):
 
     buys_per_s = buys_per_s.to_pandas().set_index("time")
     sells_per_s = sells_per_s.to_pandas().set_index("time")
-    buys_per_s.to_csv('retbuy.csv', index=False)
-    sells_per_s.to_csv('retsel.csv', index=False)
     buys_per_s = reindex_to_seconds(buys_per_s, base_date)
     sells_per_s = reindex_to_seconds(sells_per_s, base_date) 
 
@@ -104,7 +102,6 @@ def calculate_oib_metrics(df1_filtered, df2_filtered, base_date):
     })
     oib_metrics.reset_index(inplace = True)
     oib_metrics.rename(columns={'index': 'time'}, inplace=True)
-    oib_metrics.to_csv('file.csv', index=False)
     return oib_metrics
 
 #Calculate the variance and autocorrelation of orderflow by Chordia, Hu, Subrahmanyam and Tong, MS 2019
@@ -126,7 +123,7 @@ def apply_oib_aggregations(df):
     ])
     return resampled_df.to_pandas().set_index('time')
         
-#Calculate the variance and autocorrelation of returns      
+#Calculate the variance and autocorrelation of returns, receives a polars dataframe
 def apply_return_aggregations(pl_df, column='returns', sign=False, outside_trading=False):
     if pl_df is None or pl_df.shape[0] == 0:
         return None
@@ -279,7 +276,6 @@ def apply_quote_aggregations(df_filtered, df_name, outside_trading=False):
                 lambda x: ''.join(sorted(set([c for c in x if c in valid_chars]))), return_dtype=pl.Utf8
             )
 
-        
         aggregations = [
             pl.col('price').last().alias('last_price'),
             pl.col('vol').last().alias('last_vol'),
@@ -320,7 +316,6 @@ def apply_midpoint_aggregations(df_filtered, outside_trading=False):
     interval_minutes = '1m' if not outside_trading else '30m'
     max_events_label = 'max_events_s' if not outside_trading else 'max_events_m'
 
-
     try:
         #Group the dataframe to 1-second intervals and count the events inside
         seconds_df = pl_df.group_by_dynamic('time', every=interval_seconds, closed='left', label='left').agg([
@@ -349,7 +344,7 @@ def apply_midpoint_aggregations(df_filtered, outside_trading=False):
         print(f"An error occurred: {e}")
         return
     
-
+#For resampling returns, outputs a polars dataframe
 def process_resample_data(df, interval, base_date=None, outside_trading=False):
     if df is None or df.empty or df.isna().all().all():
         return None
@@ -396,7 +391,6 @@ def process_resample_data(df, interval, base_date=None, outside_trading=False):
     #since the volume has been used for the weighting, it is now dropped from the dataframe
     if 'vol' in resampled_df.columns:
         resampled_df = resampled_df.drop('vol')
-    
     return resampled_df
 
 def process_daily(df_filtered_inside, df_filtered_outside, cond_char_set, is_cond=True):
@@ -411,7 +405,6 @@ def process_daily(df_filtered_inside, df_filtered_outside, cond_char_set, is_con
 
     # Loop through both intervals: inside and outside
     for interval_name, df_interval in zip(['inside', 'outside'], [df_filtered_inside, df_filtered_outside]):
-    
         # Loop through characters in the set (condition or exchange)
         for char in cond_char_set:
             if char == '@':

@@ -53,7 +53,6 @@ def load_dataset(
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
     try:
         table_path=f"{dataset_path}table"
-        print(table_path)
         dataset = hdf_file.get_node(table_path)
 
         column_names =  hdf_file.get_node(dataset_path)._v_attrs["column_names"]
