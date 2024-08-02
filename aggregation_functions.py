@@ -55,8 +55,8 @@ def calculate_minute_volatility(returns):
         return np.nan
     return x.std()
 
-#Calculate the autocorrelation
-def calculate_autocorrelation(returns, lag=1):
+#Calculate the partial autocorrelation
+def calculate_p_autocorrelation(returns, lag=1):
     x = returns.to_numpy()
     x = x[~np.isnan(x)]
     if len(x) <= lag:
@@ -64,6 +64,21 @@ def calculate_autocorrelation(returns, lag=1):
     if np.var(x) == 0 or np.var(x[:-lag]) == 0 or np.var(x[lag:]) == 0:
         return np.nan
     return np.corrcoef(x[:-lag], x[lag:])[0, 1]
+
+#Calculate the non-partial autocorrelation
+def calculate_autocorrelation(returns, lag=1):
+    x = returns.to_numpy()
+    x = x[~np.isnan(x)]
+    if len(x) < lag:
+        return np.nan
+    mean=np.mean(x)
+    var=np.var(x)
+    xp=x-mean
+    if var == 0:
+        return np.nan
+    corr=np.sum(xp[lag:]*xp[:-lag])/len(x)/var
+    return np.array(corr)
+
 
 #Calculate the orderflow by Chordia, Hu, Subrahmanyam and Tong, MS 2019
 
@@ -100,6 +115,7 @@ def calculate_oib_metrics(df1_filtered, df2_filtered, base_date):
         'OIB_NUM': oib_num_s,
         'OIB_DOLL': oib_doll_s
     })
+    oib_metrics.dropna(inplace=True)
     oib_metrics.reset_index(inplace = True)
     oib_metrics.rename(columns={'index': 'time'}, inplace=True)
     return oib_metrics
