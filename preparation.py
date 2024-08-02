@@ -192,30 +192,30 @@ def calculate_returns_shift(df, price_col='price', time_col='time', additional_c
 #For computing the rolling median for the price value of a dataframe, in order to apply the cleaning step A2 in TAQ Cleaning Techniques
 @njit
 def rolling_median_exclude_self(a, W):
-    half_window = W // 2
     medians = np.full(a.size, np.nan)
     
-    for i in range(half_window, len(a) - half_window):
-        if i < half_window or i >= len(a) - half_window:
-            continue
-        window_data = np.concatenate((a[i - half_window:i], a[i + 1:i + half_window + 1]))
-        medians[i] = np.median(window_data)
+    for i in range(a.size):
+        start = max(0, i - W // 2)
+        end = min(a.size, i + W // 2 + 1)
+        window_data = np.concatenate((a[start:i], a[i + 1:end]))
+        if window_data.size > 0:
+            medians[i] = np.median(window_data)
 
     return medians
 
 #For computing the rolling mad for the price value of a dataframe, in order to apply the cleaning step A2 in TAQ Cleaning Techniques
 @njit
 def rolling_mad_exclude_self(a, W):
-    half_window = W // 2
     mads = np.full(a.size, np.nan)
     
-    for i in range(half_window, len(a) - half_window):
-        if i < half_window or i >= len(a) - half_window:
-            continue
-        window_data = np.concatenate((a[i - half_window:i], a[i + 1:i + half_window + 1]))
-        median = np.median(window_data)
-        mad = np.mean(np.abs(window_data - median))
-        mads[i] = mad
+    for i in range(a.size):
+        start = max(0, i - W // 2)
+        end = min(a.size, i + W // 2 + 1)
+        window_data = np.concatenate((a[start:i], a[i + 1:end]))
+        if window_data.size > 0:
+            median = np.median(window_data)
+            mad = np.mean(np.abs(window_data - median))
+            mads[i] = mad
     
     return mads
 
@@ -368,8 +368,8 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         nbbos.reset_index(drop=True)
 
         #Cleaning Step Q4
-        nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 51)
-        nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 51)
+        nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 50)
+        nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 50)
         nbbos['exclude'] = np.abs(nbbos['midpoint'] - nbbos['rolling_median']) > 10 * nbbos['rolling_mad']
         nbbos = nbbos[~nbbos['exclude']]
         nbbos = nbbos.drop(columns=['rolling_median', 'rolling_mad', 'exclude'])
