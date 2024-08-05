@@ -208,9 +208,6 @@ def apply_aggregations(df_filtered, df_name, outside_trading=False):
 
         #Compute the VWAP
         def calculate_vwap_pl():
-            total_volume = pl.col('vol').sum()
-            if total_volume == 0:
-               return 0.0
             return (pl.col('price') * pl.col('vol')).sum() / pl.col('vol').sum()
             
         #Compute the TWAP
