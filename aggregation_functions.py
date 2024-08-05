@@ -104,11 +104,14 @@ def calculate_oib_metrics(df1_filtered, df2_filtered, base_date):
     buys_per_s = buys_per_s.to_pandas().set_index("time")
     sells_per_s = sells_per_s.to_pandas().set_index("time")
     buys_per_s = reindex_to_seconds(buys_per_s, base_date)
-    sells_per_s = reindex_to_seconds(sells_per_s, base_date) 
+    sells_per_s = reindex_to_seconds(sells_per_s, base_date)
 
-    oib_shr_s = (buys_per_s['shr'] - sells_per_s['shr']) / (buys_per_s['shr'] + sells_per_s['shr'])
-    oib_num_s = (buys_per_s['num'] - sells_per_s['num']) / (buys_per_s['num'] + sells_per_s['num'])
-    oib_doll_s = (buys_per_s['doll'] - sells_per_s['doll']) / (buys_per_s['doll'] + sells_per_s['doll'])
+    def safe_divide(numerator, denominator):
+        return numerator / denominator if denominator != 0 else np.nan
+
+    oib_shr_s = safe_divide(buys_per_s['shr'] - sells_per_s['shr'], buys_per_s['shr'] + sells_per_s['shr'])
+    oib_num_s = safe_divide(buys_per_s['num'] - sells_per_s['num'], buys_per_s['num'] + sells_per_s['num'])
+    oib_doll_s = safe_divide(buys_per_s['doll'] - sells_per_s['doll'], buys_per_s['doll'] + sells_per_s['doll'])
     
     oib_metrics = pd.DataFrame({
         'OIB_SHR': oib_shr_s,
@@ -208,6 +211,9 @@ def apply_aggregations(df_filtered, df_name, outside_trading=False):
 
         #Compute the VWAP
         def calculate_vwap_pl():
+            total_volume = pl.col('vol').sum()
+            if total_volume == 0:
+               return 0.0
             return (pl.col('price') * pl.col('vol')).sum() / pl.col('vol').sum()
             
         #Compute the TWAP

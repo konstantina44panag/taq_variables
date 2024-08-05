@@ -339,7 +339,7 @@ def main():
         var_5 = apply_ret_variances_aggregations(log_returns_5s,'variance_5s')
         var_15 = pd.DataFrame()
         var_15 = apply_ret_variances_aggregations(log_returns_15s, 'variance_15s')
-
+        variance_ratio_df = None
         # Merge the two variances on the time index and find the two variance ratios
         if var_5 is not None and not var_5.empty and var_15 is not None and not var_15.empty:
             variance_ratio_df = pd.merge(var_5, var_15, left_index=True, right_index=True)
