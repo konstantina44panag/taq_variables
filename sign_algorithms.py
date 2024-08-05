@@ -13,7 +13,7 @@ class TradeAnalyzer:
         self.Bid = bid
         self.tc = None
 
-    def classify_trades(self, method='ds_3', freq=0):
+    def classify_trades(self, method='lee_ready', freq=None):
         self.tc = TradeClassification(self.trades, Ask=self.Ask, Bid=self.Bid)
-        self.tc.classify(method=method, freq=freq, reduce_precision=True)
+        self.tc.classify(method=method, freq=freq, reduce_precision=False)
         return self.tc.df_tr

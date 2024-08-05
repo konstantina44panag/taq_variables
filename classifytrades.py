@@ -76,7 +76,7 @@ def quote_index(q_t,tr_t):
     return left, right
 
 
-def interpolate_time(t,freq,hj_version=False):
+def interpolate_time(t,freq,hj_version=True):
     """
     Interpolate timestamp precision. 
 
