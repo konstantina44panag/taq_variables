@@ -106,13 +106,10 @@ def calculate_oib_metrics(df1_filtered, df2_filtered, base_date):
     buys_per_s = reindex_to_seconds(buys_per_s, base_date)
     sells_per_s = reindex_to_seconds(sells_per_s, base_date)
 
-    def safe_divide(numerator, denominator):
-        return np.where(denominator != 0, numerator / denominator, np.nan)
-
-    oib_shr_s = safe_divide(buys_per_s['shr'] - sells_per_s['shr'], buys_per_s['shr'] + sells_per_s['shr'])
-    oib_num_s = safe_divide(buys_per_s['num'] - sells_per_s['num'], buys_per_s['num'] + sells_per_s['num'])
-    oib_doll_s = safe_divide(buys_per_s['doll'] - sells_per_s['doll'], buys_per_s['doll'] + sells_per_s['doll'])
-
+    oib_shr_s = (buys_per_s['shr'] - sells_per_s['shr']) / (buys_per_s['shr'] + sells_per_s['shr'])
+    oib_num_s = (buys_per_s['num'] - sells_per_s['num']) / (buys_per_s['num'] + sells_per_s['num'])
+    oib_doll_s = (buys_per_s['doll'] - sells_per_s['doll']) / (buys_per_s['doll'] + sells_per_s['doll'])
+    
     oib_metrics = pd.DataFrame({
         'OIB_SHR': oib_shr_s,
         'OIB_NUM': oib_num_s,
