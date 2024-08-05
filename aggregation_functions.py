@@ -411,9 +411,10 @@ def process_resample_data(df, interval, base_date=None, outside_trading=False):
 
 def process_daily(df_filtered_inside, df_filtered_outside, set, column, is_cond=True):
     def calculate_vwap(df):
-        if df.height == 0:
+        total_volume = df['vol'].sum()
+        if total_volume == 0:
             return 0.0
-        return (df['price'] * df['vol']).sum() / df['vol'].sum()
+        return (df['price'] * df['vol']).sum() / total_volume
 
     # Dictionaries to store the results
     daily_inside = {}
