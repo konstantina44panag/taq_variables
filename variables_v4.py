@@ -454,7 +454,7 @@ def main():
         write_end_time = time.time()
 
     #Write the time analysis to a text file
-    if args.var_analysis_path is not None:
+    if args.var_analysis_path is not None and args.stock_name == "IBM":
         with open(args.var_analysis_path, "a") as f:
             f.write(f"Stock: {args.stock_name}\n")
             f.write(f"Day: {args.day}\n")
@@ -471,7 +471,7 @@ def main():
 
 if __name__ == "__main__":
     print(f"Profiling path: {args.prof_analysis_path}")  # Debug statement to check profiling path
-    if args.prof_analysis_path is not None:
+    if args.prof_analysis_path is not None and args.stock_name == "IBM":
         # Profile the main function
         pr = cProfile.Profile()
         pr.enable()
