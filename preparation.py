@@ -642,7 +642,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         Sells_Oddlot_trades.reset_index(inplace = True)
         
         #Write the time analysis
-        if prep_analysis_path is not None:
+        if prep_analysis_path is not None and args.stock_name == "IBM":
             with open(prep_analysis_path, "a") as f:
                 f.write(f"Stock: {stock_name}\n")
                 f.write(f"Day: {base_date}\n")
