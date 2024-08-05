@@ -56,7 +56,7 @@ def calculate_minute_volatility(returns):
     return x.std()
 
 #Calculate the partial autocorrelation
-def calculate_p_autocorrelation(returns, lag=1):
+def calculate_autocorrelation_v1(returns, lag=1):
     x = returns.to_numpy()
     x = x[~np.isnan(x)]
     if len(x) <= lag:
@@ -66,7 +66,7 @@ def calculate_p_autocorrelation(returns, lag=1):
     return np.corrcoef(x[:-lag], x[lag:])[0, 1]
 
 #Calculate the non-partial autocorrelation
-def calculate_autocorrelation(returns, lag=1):
+def calculate_autocorrelation_v2(returns, lag=1):
     x = returns.to_numpy()
     x = x[~np.isnan(x)]
     if len(x) < lag:
@@ -131,11 +131,11 @@ def apply_oib_aggregations(df):
 
     resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg([
     pl.col('OIB_SHR').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('OIB_SHR_volatility_s'),
-    pl.col('OIB_SHR').map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias('OIB_SHR_autocorr_s'),
+    pl.col('OIB_SHR').map_elements(calculate_autocorrelation_v1, return_dtype=pl.Float64).alias('OIB_SHR_autocorr_s'),
     pl.col('OIB_NUM').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('OIB_NUM_volatility_s'),
-    pl.col('OIB_NUM').map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias('OIB_NUM_autocorr_s'),
+    pl.col('OIB_NUM').map_elements(calculate_autocorrelation_v1, return_dtype=pl.Float64).alias('OIB_NUM_autocorr_s'),
     pl.col('OIB_DOLL').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('OIB_DOLL_volatility_s'),
-    pl.col('OIB_DOLL').map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias('OIB_DOLL_autocorr_s'),
+    pl.col('OIB_DOLL').map_elements(calculate_autocorrelation_v1, return_dtype=pl.Float64).alias('OIB_DOLL_autocorr_s'),
     ])
     return resampled_df.to_pandas().set_index('time')
         
@@ -157,7 +157,7 @@ def apply_return_aggregations(pl_df, column='returns', sign=False, outside_tradi
 
     resampled_df = pl_df.group_by_dynamic('time', every=interval, closed='left', label='left').agg([
         pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
-        pl.col(column).map_elements(calculate_autocorrelation, return_dtype=pl.Float64).alias(autocorr_col_name),
+        pl.col(column).map_elements(calculate_autocorrelation_v1, return_dtype=pl.Float64).alias(autocorr_col_name),
     ])
     
     return resampled_df.to_pandas().set_index('time')
@@ -409,7 +409,7 @@ def process_resample_data(df, interval, base_date=None, outside_trading=False):
         resampled_df = resampled_df.drop('vol')
     return resampled_df
 
-def process_daily(df_filtered_inside, df_filtered_outside, cond_char_set, is_cond=True):
+def process_daily(df_filtered_inside, df_filtered_outside, set, column, is_cond=True):
     def calculate_vwap(df):
         if df.height == 0:
             return 0.0
@@ -422,18 +422,18 @@ def process_daily(df_filtered_inside, df_filtered_outside, cond_char_set, is_con
     # Loop through both intervals: inside and outside
     for interval_name, df_interval in zip(['inside', 'outside'], [df_filtered_inside, df_filtered_outside]):
         # Loop through characters in the set (condition or exchange)
-        for char in cond_char_set:
+        for char in set:
             if char == '@':
-                key = 'cond_at' if is_cond else 'vwap_ex_at'
+                key = 'cond_at' if is_cond else 'ex_at'
             elif char == '':
-                key = 'cond_empty' if is_cond else 'vwap_ex_empty'
+                key = 'cond_empty' if is_cond else 'ex_empty'
             else:
-                key = f'cond_{char}' if is_cond else f'vwap_ex_{char}'
+                key = f'cond_{char}' if is_cond else f'ex_{char}'
 
             if char == '' and is_cond:
-                df_filtered = df_interval.filter(pl.col('cond') == '')
+                df_filtered = df_interval.filter(pl.col(column) == '')
             else:
-                df_filtered = df_interval.filter(pl.col('cond').str.contains(char))
+                df_filtered = df_interval.filter(pl.col(column).str.contains(char))
 
             vwap = calculate_vwap(df_filtered)
             tot_vol = df_filtered['vol'].sum()
@@ -454,7 +454,8 @@ def process_daily(df_filtered_inside, df_filtered_outside, cond_char_set, is_con
                 daily_outside[key]['tot_vol'] = tot_vol
                 daily_outside[key]['no_buys'] = no_buys
                 daily_outside[key]['no_sells'] = no_sells
-        if is_cond == False:
+        #compute one time, e.g. when the function is called for conditions, the metrics for all trades inside and seperately outside trading hours
+        if is_cond == True:
             if interval_name == 'inside':
                 daily_inside['vwap'] = calculate_vwap(df_interval)
                 daily_inside['tot_vol'] = df_interval['vol'].sum()
@@ -466,23 +467,17 @@ def process_daily(df_filtered_inside, df_filtered_outside, cond_char_set, is_con
                 daily_outside['no_buys'] = df_interval.filter(pl.col('Initiator') == 1).height
                 daily_outside['no_sells'] = df_interval.filter(pl.col('Initiator') == -1).height
 
-    def flatten_dict(d, parent_key='', sep='_'):
-        items = []
-        for k, v in d.items():
-            new_key = f"{parent_key}{sep}{k}" if parent_key else k
-            if isinstance(v, dict):
-                items.extend(flatten_dict(v, new_key, sep=sep).items())
-            else:
-                items.append((new_key, v))
-        return dict(items)
+    return daily_inside, daily_outside
 
-    flat_daily_inside = flatten_dict(daily_inside)
-    flat_daily_outside = flatten_dict(daily_outside)
-    
-    daily_inside_df = pd.DataFrame([flat_daily_inside])
-    daily_outside_df = pd.DataFrame([flat_daily_outside])
-    
-    return daily_inside_df, daily_outside_df
+def flatten_dict(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 def calculate_Herfindahl(df):
     if df is None or df.empty or df.isna().all().all():

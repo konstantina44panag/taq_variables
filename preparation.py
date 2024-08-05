@@ -43,7 +43,7 @@ def convert_float_to_datetime(df, float_column, base_date):
 #def load_dataset: For loading the trades dataframe from the ctm files, the necessary columns for cleaning and variables are TIME_M, PRICE, SIZE, TR_CORR, SALE_COND, in some files the names change to TRCORR, TRCOND, 
 #so I identify the columns by the patterns CORR, COND
 #The data are loaded to the trades dataframe
-def load_dataset(
+def load_trades_dataset(
     hdf_file,
     dataset_path,
     columns_of_interest,
@@ -78,7 +78,7 @@ def load_dataset(
 #def load_dataset_with_exclusion: For loading the nbbo dataframe from the complete_nbbo files, the necessary columns for cleaning and variables are TIME_M, BEST_ASK, BEST_BID, BestAskShares, BestBidShares, QU_COND in some files the names change to QUOTE_COND 
 #so I identify the column by the pattern COND and excluding the pattern NBBO, since NBBO_COND is a different column than QU_COND
 #The data are loaded to the nbbos dataframe
-def load_dataset_with_exclusion(
+def load_quotes_dataset(
     hdf_file,
     dataset_path,
     columns_of_interest,
@@ -197,7 +197,14 @@ def rolling_median_exclude_self(a, W):
     for i in range(a.size):
         start = max(0, i - W // 2)
         end = min(a.size, i + W // 2 + 1)
-        window_data = np.concatenate((a[start:i], a[i + 1:end]))
+        if i == 0:
+            window_data = a[i + 1:end]
+        elif i == 1:
+            window_data = np.concatenate((a[:i-1], a[i + 1:end]))
+        elif i > 1 and i < a.size:
+            window_data = np.concatenate((a[start:i-1], a[i + 1:end ]))
+        elif i == a.size:
+            window_data = a[start:i-1]
         if window_data.size > 0:
             medians[i] = np.median(window_data)
 
@@ -210,8 +217,15 @@ def rolling_mad_exclude_self(a, W):
     
     for i in range(a.size):
         start = max(0, i - W // 2)
-        end = min(a.size, i + W // 2 + 1)
-        window_data = np.concatenate((a[start:i], a[i + 1:end]))
+        end = min(a.size, i + W // 2 )
+        if i == 0:
+            window_data = a[i + 1:end]
+        elif i == 1:
+            window_data = np.concatenate((a[:i-1], a[i + 1:end]))
+        elif i > 1 and i < a.size:
+            window_data = np.concatenate((a[start:i-1], a[i + 1:end ]))
+        elif i == a.size:
+            window_data = a[start:i-1]
         if window_data.size > 0:
             median = np.median(window_data)
             mad = np.mean(np.abs(window_data - median))
@@ -230,14 +244,14 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
 
         # Load datasets
         with tables.open_file(hdf5_file_path, "r") as hdf:
-            trades = load_dataset(
+            trades = load_trades_dataset(
                 hdf,
                 ctm_dataset_path,
                 ["TIME_M", "EX", "PRICE", "SIZE"],
                 corr_pattern="CORR",
                 cond_pattern="COND",
             )
-            nbbos = load_dataset_with_exclusion(
+            nbbos = load_quotes_dataset(
                 hdf,
                 complete_nbbo_dataset_path,
                 [
@@ -299,7 +313,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         #Data cleaning for trades
         clean_only_start_time = time.time()
        
-        #Remove nan or zero prices, P2 cleaning step in Taq Cleaning Techniques
+        #Remove nan or zero prices, P2 cleaning step in Taq Cleaning Techniques google doc 
         mask = (~np.isnan(trades['price'].values)) & (trades['price'].values != 0)
         trades = trades.loc[mask]
 
@@ -327,11 +341,19 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         trades.reset_index(drop=True)
       
         #Cleaning nbbos
-        #Remove nan or zero quotes, cleaning step P2
+        #Remove nan or zero quotes, cleaning step P2*
         mask = (~np.isnan(nbbos['BEST_ASK'].values)) & (~np.isnan(nbbos['BEST_BID'].values)) & (nbbos['BEST_ASK'].values != 0) & (nbbos['BEST_BID'].values != 0)
         nbbos = nbbos.loc[mask]        
-        #switch to polars
+        #H&j
         pl_nbbos = pl.from_pandas(nbbos)
+        #mask1 = (pl.col("BEST_ASK") <= 0) & (pl.col("BEST_BID") <= 0)
+        #mask2 = (pl.col("Best_AskSizeShares") <= 0) & (pl.col("Best_BidSizeShares") <= 0)
+        #mask3 = pl.col("BEST_ASK").is_null() & pl.col("BEST_BID").is_null()
+        #mask4 = pl.col("Best_AskSizeShares").is_null() & pl.col("Best_BidSizeShares").is_null()
+
+        # Combine masks
+        #combined_mask = ~(mask1 | mask2 | mask3 | mask4)
+        #pl_nbbos = pl_nbbos.filter(combined_mask)
         
         #Check for empty dataframe after the cleaning step
         if pl_nbbos.height == 0:
@@ -360,8 +382,24 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
             
         #Create Midpoint
         pl_nbbos = pl_nbbos.with_columns(((pl_nbbos['BEST_BID'] + pl_nbbos['BEST_ASK']) / 2).alias('midpoint'))
-        #switch to pandas
-        nbbos = pl_nbbos.to_pandas()
+        #H&J
+        #pl_nbbos = pl_nbbos.with_columns(
+        #    [
+        #        pl.col("Midpoint").shift(1).alias("lmid")
+        #    ]
+        #)
+        #pl_nbbos = pl_nbbos.with_columns(
+        #    [
+        #        pl.when(pl.col("lmid").is_null())
+        #        .then(None).otherwise(pl.col("lmid")).alias("lmid")
+        #    ]
+        #)
+        #pl_nbbos = pl_nbbos.with_columns(
+        #    [
+        #        (pl.col("lmid") - 2.5).alias("lm25"),
+        #        (pl.col("lmid") + 2.5).alias("lp25")
+        #    ]
+        #)
 
         #switch to pandas
         nbbos = pl_nbbos.to_pandas()
@@ -380,10 +418,8 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
             raise NoNbbosException()
 
         clean_only_end_time = time.time()
-
         
         #Define the appropriate dataframes for variable calculation
-        trades.drop
         #Define the Ask and Bid
         Ask = nbbos[
             ["time", "datetime", "BEST_ASK", "Best_AskSizeShares", "qu_cond"]
@@ -401,7 +437,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         )
 
         #Define the nbbo_signs
-        nbbo_start_time = time.time()
         best_bid = nbbos['BEST_BID'].values
         best_bid_size_shares = nbbos['Best_BidSizeShares'].values
         best_ask = nbbos['BEST_ASK'].values
@@ -421,7 +456,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         nbbo_signs.rename(
             columns={"datetime": "time", "sign": "returns", "vol_sign":"vol"}, inplace=True
         )
-        nbbo_end_time = time.time() 
 
         #Create a value column
         trades['value'] = trades['price'] * trades['vol'] 
@@ -616,7 +650,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
                 f.write(f"decode time: {decode_end_time - decode_start_time} seconds\n")
                 f.write(f"format time: {format_end_time - format_start_time} seconds\n")
                 f.write(f"Clean time: {clean_only_end_time - clean_only_start_time} seconds\n")
-                f.write(f"nbbo sign time: {nbbo_end_time - nbbo_start_time} seconds\n")
                 f.write(f"specific trades time: {specific_df_end_time - specific_df_start_time} seconds\n")
                 f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
                 f.write(f"TradeSigns time: {trsigns_time} seconds\n")

@@ -12,7 +12,7 @@ from datetime import timedelta
 from datetime import datetime
 from statsmodels.tsa.stattools import acf
 from preparation import prepare_datasets, NoTradesException, NoNbbosException
-from aggregation_functions import auction_conditions, reindex_to_full_time, reindex_to_seconds, calculate_minute_variance, calculate_minute_volatility, calculate_autocorrelation, calculate_oib_metrics, apply_oib_aggregations, apply_return_aggregations,apply_ret_variances_aggregations, apply_aggregations, apply_quote_aggregations, apply_midpoint_aggregations, process_resample_data, process_daily, calculate_Herfindahl
+from aggregation_functions import auction_conditions, reindex_to_full_time, flatten_dict, calculate_oib_metrics, apply_oib_aggregations, apply_return_aggregations,apply_ret_variances_aggregations, apply_aggregations, apply_quote_aggregations, apply_midpoint_aggregations, process_resample_data, process_daily, calculate_Herfindahl
 pd.set_option('display.max_rows', 300)
 
 class NoTradesException(Exception):
@@ -112,7 +112,6 @@ def main():
     
     # Start timing the main calculations
     main_start_time = time.time()
-    
    
     #Process daily bars
     exchanges_set = list('ABCDIJKMNPSTQVWXYZ')
@@ -126,10 +125,18 @@ def main():
     trades.reset_index(inplace=True)
     df_filtered_inside =  pl.from_pandas(df_filtered_inside)
     df_filtered_outside = pl.from_pandas(df_filtered_outside)
-    daily_inside_df_cond, daily_outside_df_cond = process_daily(df_filtered_inside, df_filtered_outside, conditions_set, is_cond=True)
-    daily_inside_df_ex, daily_outside_df_ex = process_daily(df_filtered_inside, df_filtered_outside, exchanges_set, is_cond=False)
-    daily_inside_df = pd.concat([daily_inside_df_cond, daily_inside_df_ex], axis=1)
-    daily_outside_df = pd.concat([daily_outside_df_cond, daily_outside_df_ex], axis=1)
+    daily_inside_df_cond, daily_outside_df_cond = process_daily(df_filtered_inside, df_filtered_outside, conditions_set, 'cond', is_cond=True)
+    daily_inside_df_ex, daily_outside_df_ex = process_daily(df_filtered_inside, df_filtered_outside, exchanges_set,'EX', is_cond=False)
+    flat_daily_inside_cond = flatten_dict(daily_inside_df_cond)
+    flat_daily_outside_cond = flatten_dict(daily_outside_df_cond)
+    flat_daily_inside_ex = flatten_dict(daily_inside_df_ex)
+    flat_daily_outside_ex = flatten_dict(daily_outside_df_ex)
+    daily_inside_cond = pd.DataFrame([flat_daily_inside_cond])
+    daily_outside_cond = pd.DataFrame([flat_daily_outside_cond])
+    daily_inside_ex = pd.DataFrame([flat_daily_inside_ex])
+    daily_outside_ex = pd.DataFrame([flat_daily_inside_ex])
+    daily_inside_df = pd.concat([daily_inside_cond, daily_inside_ex], axis=1)
+    daily_outside_df = pd.concat([daily_outside_cond, daily_outside_ex], axis=1)
 
     #Cleaning step T2, clear trade conditions after the computation of daily bars
     
