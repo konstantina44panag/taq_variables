@@ -171,7 +171,6 @@ if [ -f "$hdf5OriginalFile" ]; then
                 echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day"
                 #pass the arguments to the python script
                 python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile $emptyVariables
-                echo "Executed for: $date_str, Stock: $stock, HDF5: $hdf5OriginalFile"
             else
                 echo "The $stock was not traded on ${month}-${year}-${day}"
             fi
