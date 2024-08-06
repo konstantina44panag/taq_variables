@@ -94,20 +94,16 @@ def main():
             args.prof_analysis_path)
 
         if result is None:
-            print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
             return
 
         trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Buys_Retail_trades, Sells_Retail_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result
 
     except NoTradesException:
-        print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
         return
     except NoNbbosException:
-        print(f"No NBBOs to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
         return
     
     except Exception as e:
-        print(f"An error occurred while preparing datasets: {e}")
         return
     
     # Start timing the main calculations
@@ -145,7 +141,6 @@ def main():
     
     #Check for empty dataframe after the cleaning step
     if pl_trades.height == 0:
-        print(f"No trades after cleaning techniques for {args.stock_name}")
         raise NoTradesException()
     
     #Processing open /close auction prices
@@ -184,7 +179,6 @@ def main():
                 agg_df = apply_aggregations(df_filtered, name)
                 aggregated_data[name] = reindex_to_full_time(agg_df, args.base_date)                
             except KeyError as e:
-                print(f"Error processing {name}: {e}")
                 continue
 
         if not df_filtered_outside.empty:
@@ -192,7 +186,6 @@ def main():
                 agg_df_outside_trading = apply_aggregations(df_filtered_outside, name, outside_trading=True)
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
-                print(f"Error processing {name}: {e} outside trading hours")
                 continue
     end_process_trades_time = time.time()
 
@@ -246,14 +239,12 @@ def main():
                 midpoint_agg_df = apply_midpoint_aggregations(df_filtered)
                 aggregated_data["Midpoint"] = reindex_to_full_time(midpoint_agg_df, args.base_date)
             except KeyError as e:
-                print(f"Error processing Midpoint: {e}")
 
         if not df_filtered_outside.empty:
             try:
                 midpoint_agg_df_outside_trading = apply_midpoint_aggregations(df_filtered_outside, outside_trading=True)
                 aggregated_data_outside_trading["Midpoint"] = reindex_to_full_time(midpoint_agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
-                print(f"Error processing Midpoint outside trading hours: {e}")        
     end_process_midpoint_time = time.time()
 
     #Processing Quotes, apply the function apply_quote_aggregations from above
@@ -278,7 +269,6 @@ def main():
                 agg_df = apply_quote_aggregations(df_filtered, name)
                 aggregated_data[name] = reindex_to_full_time(agg_df,  args.base_date)          
             except KeyError as e:
-                print(f"Error processing {name}: {e}")
                 continue
 
         if not df_filtered_outside.empty:
@@ -286,7 +276,6 @@ def main():
                 agg_df_outside_trading = apply_quote_aggregations(df_filtered_outside, name, outside_trading=True)
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading,  args.base_date, outside_trading=True)
             except KeyError as e:
-                print(f"Error processing {name}: {e} outside trading hours")
                 continue
     end_process_quotes_time = time.time()
     
@@ -345,14 +334,10 @@ def main():
         if var_5 is not None and not var_5.empty and var_15 is not None and not var_15.empty:
             variance_ratio_df = pd.merge(var_5, var_15, left_index=True, right_index=True)
             variance_ratio_df['vratio_s'] = np.abs((variance_ratio_df['variance_15s'] / (3 * variance_ratio_df['variance_5s'])) - 1)
-        else:
-            print(f"Empty variances for calculating variance ratio 1, there is only second-return for that day")
 
         if var_1 is not None and not var_1.empty and var_5 is not None and not var_5.empty: 
                 variance_ratio_df2 = pd.merge(var_1, var_5, left_index=True, right_index=True)
                 variance_ratio_df2['vratio2_s'] = np.abs((variance_ratio_df2['variance_5s'] / (5 * variance_ratio_df2['variance_1s'])) - 1)
-        else:
-            print(f"Empty variances for calculating variance ratio 2, there is only second-return for that day") 
 
         if variance_ratio_df is not None and not variance_ratio_df.empty:
             aggregated_data[name] = reindex_to_full_time(variance_ratio_df['vratio_s'],  args.base_date)
@@ -429,7 +414,7 @@ def main():
                 with open(args.emp_analysis_path, "a") as f:
                     f.write(message)
             except IOError as e:
-                print(f"An error occurred while writing to the file: {e}")
+
 
 
     #Call saving function for groups daily_auction, inside_trading, outside_trading
