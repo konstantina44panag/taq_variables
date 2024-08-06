@@ -108,7 +108,7 @@ def main():
     
     except Exception as e:
         print(f"An error occurred while preparing datasets: {e}")
-        return
+        raise
     
     # Start timing the main calculations
     main_start_time = time.time()
@@ -247,6 +247,7 @@ def main():
                 aggregated_data["Midpoint"] = reindex_to_full_time(midpoint_agg_df, args.base_date)
             except KeyError as e:
                 print(f"Error processing Midpoint: {e}")
+                raise
 
         if not df_filtered_outside.empty:
             try:
