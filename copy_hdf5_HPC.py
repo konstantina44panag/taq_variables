@@ -3,7 +3,7 @@
 # To call this script please make sure of the appropriate directories in lines 23, 24
 # The syntax is:
 # python3.11 copy_hdf5.py year month -- days NUMBER -- stocks NAME
-# python3.11 copy_hdf5.py 2018 10 --days 03 04 05 --stocks ABC AAPL IBM ZZ
+# python3.11 copy_hdf5.py 2018 10 --days 03 04 05 --stocks all
 
 import h5py
 import argparse
@@ -20,24 +20,42 @@ parser.add_argument('month', type=str, help='Month of the data')
 parser.add_argument('--days', nargs='+', help='Days of the data', required=True)
 parser.add_argument('--stocks', nargs='+', help='Stock symbols', required=True)
 
-# Parse the arguments
 args = parser.parse_args()
 year = args.year
 month = args.month
 days = args.days
 stocks = args.stocks
 
-# Paths to the original and new HDF5 files
-original_file_path = f'/mnt/e/repository/data/taq/processed/raw_hdf5/{year}{month}.h5'
-new_file_path = f'/mnt/e/repository/data/taq/processed/test_hdf5/{year}{month}.h5'
+original_file_path = f'/work/pa24/kpanag/output/{year}{month}.h5'
+new_file_path = f'/dev/shm/kpanag/{year}{month}.h5'
 
-# Generate datasets to copy based on the provided days and stocks
+# If stocks are "all", find all available stocks for the specified days
+if "all" in stocks:
+    hdf5ContentsFilePath = "/work/pa24/kpanag/hdf_check_byname/hdf_contents/"
+    hdf5ContentsFileName = f"hdf_files_{year}{month}.txt"
+    hdf5ContentsFile = f"{hdf5ContentsFilePath}{hdf5ContentsFileName}"
+
+    # Read the available stocks from the contents file
+    available_stocks = []
+    with open(hdf5ContentsFile, 'r') as file:
+        lines = file.readlines()
+        for day in days:
+            day_pattern = f'/day{day}/ctm/table'
+            for line in lines:
+                if day_pattern in line:
+                    stock = line.split('/')[1]  # Extract the stock name from the path
+                    if stock not in available_stocks:
+                        available_stocks.append(stock)
+else:
+    available_stocks = stocks
+
+# List of datasets to copy
 datasets_to_copy = []
-for stock in stocks:
-    for day in days:
+
+for day in days:
+    for stock in available_stocks:
         datasets_to_copy.append(f'/{stock}/day{day}/ctm/')
         datasets_to_copy.append(f'/{stock}/day{day}/complete_nbbo/')
-        datasets_to_copy.append(f'/{stock}/day{day}/mastm/')
 
 def ensure_group(h5file, group_path):
     """ Ensure all groups in the given path exist in the target file """
