@@ -264,7 +264,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
                 cond_pattern="COND",
                 exclude_pattern="NBBO",
             )
-            hdf.close()
 
         load_end_time = time.time()
         load_time = load_end_time - load_start_time
