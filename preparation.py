@@ -322,7 +322,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
 
         #Check for empty dataframe after the cleaning step, otherwise an error will occur on next operations. If the trades are empty the program returns the message and calculations are skipped for this stock-day
         if pl_trades.height == 0:
-            print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
 
         #Cleaning step T1 
@@ -330,7 +329,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
 
         #Check for empty dataframe after the cleaning step
         if pl_trades.height == 0:
-            print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
             
         #Cleaning step T3
@@ -357,7 +355,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         
         #Check for empty dataframe after the cleaning step
         if pl_nbbos.height == 0:
-            print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
         
         #Cleaning Step Q1
@@ -367,7 +364,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] > pl_nbbos['BEST_BID'])
         
         if pl_nbbos.height == 0:
-            print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
 
         #Cleaning Step Q3
@@ -377,7 +373,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
 
         #Check for empty dataframe after the cleaning step
         if pl_nbbos.height == 0:
-            print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
             
         #Create Midpoint
@@ -414,7 +409,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         
         #Check for empty dataframe after the cleaning step
         if nbbos.empty:
-            print(f"No nbbos after cleaning techniques for {stock_name}")
             raise NoNbbosException()
 
         clean_only_end_time = time.time()
@@ -498,7 +492,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         tradessigns = tradessigns.drop(columns=['upper_bound', 'lower_bound'])
         
         if tradessigns.empty:
-            print(f"No trades after cleaning techniques for {stock_name}")
             raise NoTradesException()
         
         tradessigns.sort_values(by='time', inplace=True)
