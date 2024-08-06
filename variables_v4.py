@@ -185,7 +185,7 @@ def main():
                 aggregated_data[name] = reindex_to_full_time(agg_df, args.base_date)                
             except KeyError as e:
                 print(f"Error processing {name}: {e}")
-                continue
+                raise
 
         if not df_filtered_outside.empty:
             try:
@@ -193,7 +193,7 @@ def main():
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
                 print(f"Error processing {name}: {e} outside trading hours")
-                continue
+                raise
     end_process_trades_time = time.time()
 
     
@@ -253,7 +253,8 @@ def main():
                 midpoint_agg_df_outside_trading = apply_midpoint_aggregations(df_filtered_outside, outside_trading=True)
                 aggregated_data_outside_trading["Midpoint"] = reindex_to_full_time(midpoint_agg_df_outside_trading, args.base_date, outside_trading=True)
             except KeyError as e:
-                print(f"Error processing Midpoint outside trading hours: {e}")        
+                print(f"Error processing Midpoint outside trading hours: {e}")
+                raise
     end_process_midpoint_time = time.time()
 
     #Processing Quotes, apply the function apply_quote_aggregations from above
@@ -279,7 +280,7 @@ def main():
                 aggregated_data[name] = reindex_to_full_time(agg_df,  args.base_date)          
             except KeyError as e:
                 print(f"Error processing {name}: {e}")
-                continue
+                raise
 
         if not df_filtered_outside.empty:
             try:
@@ -287,7 +288,7 @@ def main():
                 aggregated_data_outside_trading[name] = reindex_to_full_time(agg_df_outside_trading,  args.base_date, outside_trading=True)
             except KeyError as e:
                 print(f"Error processing {name}: {e} outside trading hours")
-                continue
+                raise
     end_process_quotes_time = time.time()
     
 
@@ -345,14 +346,10 @@ def main():
         if var_5 is not None and not var_5.empty and var_15 is not None and not var_15.empty:
             variance_ratio_df = pd.merge(var_5, var_15, left_index=True, right_index=True)
             variance_ratio_df['vratio_s'] = np.abs((variance_ratio_df['variance_15s'] / (3 * variance_ratio_df['variance_5s'])) - 1)
-        else:
-            print(f"Empty variances for calculating variance ratio 1, there is only second-return for that day")
 
         if var_1 is not None and not var_1.empty and var_5 is not None and not var_5.empty: 
                 variance_ratio_df2 = pd.merge(var_1, var_5, left_index=True, right_index=True)
                 variance_ratio_df2['vratio2_s'] = np.abs((variance_ratio_df2['variance_5s'] / (5 * variance_ratio_df2['variance_1s'])) - 1)
-        else:
-            print(f"Empty variances for calculating variance ratio 2, there is only second-return for that day") 
 
         if variance_ratio_df is not None and not variance_ratio_df.empty:
             aggregated_data[name] = reindex_to_full_time(variance_ratio_df['vratio_s'],  args.base_date)
@@ -430,6 +427,7 @@ def main():
                     f.write(message)
             except IOError as e:
                 print(f"An error occurred while writing to the file: {e}")
+                raise
 
 
     #Call saving function for groups daily_auction, inside_trading, outside_trading
@@ -471,7 +469,6 @@ def main():
             f.write(f"Write runtime: {write_end_time - write_start_time} seconds\n")
 
 if __name__ == "__main__":
-    print(f"Profiling path: {args.prof_analysis_path}")  # Debug statement to check profiling path
     if args.prof_analysis_path is not None and args.stock_name == "IBM":
         # Profile the main function
         pr = cProfile.Profile()
@@ -487,5 +484,6 @@ if __name__ == "__main__":
                 ps.strip_dirs().sort_stats(pstats.SortKey.CUMULATIVE).print_stats()
         except IOError as e:
             print(f"An error occurred while writing the profiling data: {e}")
+            raise
     else:
         main()
