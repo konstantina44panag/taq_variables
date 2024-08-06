@@ -456,7 +456,6 @@ def main():
             f.write(f"Write runtime: {write_end_time - write_start_time} seconds\n")
 
 if __name__ == "__main__":
-    print(f"Profiling path: {args.prof_analysis_path}")  # Debug statement to check profiling path
     if args.prof_analysis_path is not None and args.stock_name == "IBM":
         # Profile the main function
         pr = cProfile.Profile()
@@ -471,6 +470,6 @@ if __name__ == "__main__":
                 ps = pstats.Stats(pr, stream=f)
                 ps.strip_dirs().sort_stats(pstats.SortKey.CUMULATIVE).print_stats()
         except IOError as e:
-            print(f"An error occurred while writing the profiling data: {e}")
+
     else:
         main()
