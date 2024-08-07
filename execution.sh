@@ -21,7 +21,7 @@ export RUST_BACKTRACE=full
 # Get the arguments
 machine=$1
 year=$2
-month=$(printf "%02d" $3)
+month=$(printf "%02d" $((10#$3)))
 shift 3
 
 # Skip over the first '--' delimiter
