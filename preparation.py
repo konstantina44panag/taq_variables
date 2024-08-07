@@ -3,6 +3,7 @@ import numpy as np
 import tables
 from sign_algorithms import TradeAnalyzer
 import logging
+import argparse
 import time
 import sys
 import traceback
@@ -24,13 +25,6 @@ class NoNbbosException(Exception):
     pass
 
 
-# Function definitions
-def print_debug_info(df, name):
-    print(f"\n{name}")
-    print(df.head())
-    print(df.columns)
-    print(f"DataFrame shape: {df.shape}")
-
 #def convert_float_to_datetime: Conversion of float timestamps to datetime object timestamps
 def convert_float_to_datetime(df, float_column, base_date):
     """Converts float time values to datetime objects based on a base date."""
@@ -48,6 +42,7 @@ def load_trades_dataset(
     dataset_path,
     columns_of_interest,
     corr_pattern="CORR",
+    suf_pattern="SUF",
     cond_pattern="COND",
 ):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
@@ -64,6 +59,8 @@ def load_trades_dataset(
         for col in column_names:
             if corr_pattern in col:
                 data["corr"] = dataset.col(col)
+            elif suf_pattern in col:
+                data["suffix"] = dataset.col(col)
             elif cond_pattern in col:
                 data["cond"] = dataset.col(col)
 
@@ -83,6 +80,7 @@ def load_quotes_dataset(
     dataset_path,
     columns_of_interest,
     cond_pattern="COND",
+    suf_pattern="SUF",
     exclude_pattern="NBBO",
 ):
     """Load specific dataset from HDF5 file using PyTables, ensuring necessary metadata exists."""
@@ -98,6 +96,9 @@ def load_quotes_dataset(
                 data[col] = dataset.col(col)
 
         for col in column_names:
+            if suf_pattern in col:
+                data["suffix"] = dataset.col(col)
+
             if cond_pattern in col and exclude_pattern not in col:
                 data["qu_cond"] = dataset.col(col)
 
@@ -238,7 +239,7 @@ _ = rolling_median_exclude_self(dummy_data, 5)
 _ = rolling_mad_exclude_self(dummy_data, 5)
 
 #def prepare_datasets: Contains the loading of data to dataframes and applies the appropriate operations, this function is called by the python script variables_v4.py which then calculates variables
-def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, method, freq, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path, prep_analysis_path=None, emp_analysis_path=None, var_analysis_path=None, prof_analysis_path=None):
+def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day, method, freq, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path, prep_analysis_path=None, emp_analysis_path=None, var_analysis_path=None, prof_analysis_path=None):
     try:
         load_start_time = time.time()
 
@@ -249,6 +250,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
                 ctm_dataset_path,
                 ["TIME_M", "EX", "PRICE", "SIZE"],
                 corr_pattern="CORR",
+                suf_pattern="SUF",
                 cond_pattern="COND",
             )
             nbbos = load_quotes_dataset(
@@ -262,6 +264,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
                     "Best_BidSizeShares",
                 ],
                 cond_pattern="COND",
+                suf_pattern="SUF",
                 exclude_pattern="NBBO",
             )
 
@@ -272,8 +275,18 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         decode_start_time = time.time()
         trades = decode_byte_strings(trades)
         nbbos = decode_byte_strings(nbbos)
+        trades["suffix"] =  trades["suffix"].astype(str)
+        nbbos["suffix"] = nbbos["suffix"].astype(str)
+        trades = trades[trades["suffix"] == s]
+        nbbos = nbbos[nbbos["suffix"] == s]
+        trades.drop(columns=["suffix"], inplace=True)
+        nbbos.drop(columns=["suffix"], inplace=True)
         decode_end_time = time.time()
-     
+        if trades.empty:
+            raise NoTradesException()
+        if nbbos.empty:
+            raise NoTradesException()
+
         #Applying formatting to trades
         format_start_time = time.time()
         trades["TIME_M"] = np.array(trades["TIME_M"], dtype=np.float64)
@@ -306,7 +319,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         nbbos.rename(columns={"TIME_M": "time"}, inplace=True)    
         
         format_end_time = time.time()
-
         #Data cleaning for trades
         clean_only_start_time = time.time()
        
@@ -631,9 +643,10 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         Sells_Oddlot_trades.reset_index(inplace = True)
         
         #Write the time analysis
-        if prep_analysis_path is not None and args.stock_name == "IBM":
+        if prep_analysis_path is not None and stock_name == "IBM":
             with open(prep_analysis_path, "a") as f:
                 f.write(f"Stock: {stock_name}\n")
+                f.write(f"Suffix: {s}\n")
                 f.write(f"Day: {base_date}\n")
                 f.write(f"Load time: {load_time} seconds\n")
                 f.write(f"decode time: {decode_end_time - decode_start_time} seconds\n")

@@ -72,7 +72,7 @@ prepareAnalysisName="preparation_analysis.txt"
 variablesAnalysisName="variable_analysis.txt"
 profilingAnalysisName="profiling_analysis.txt"
 emptyVariablesName="empty_bars.txt"
-
+getsuffixName="get_suffix.py"
 # Determine the base path and other paths based on the path_type argument
 if [ "$machine" == "REG" ]; then
     hdf5OriginalFilePath="/mnt/e/repository/data/taq/processed/raw_hdf5/"
@@ -84,6 +84,7 @@ if [ "$machine" == "REG" ]; then
     variablesAnalysisPath="$current_dir/"
     profilingAnalysisPath="$current_dir/"
     emptyVariablesPath="$current_dir/"
+    getsuffixPath="$current_dir/"
 elif [ "$machine" == "HPC" ]; then
     hdf5OriginalFilePath="/work/pa24/kpanag/output/"
     hdf5VariableFilePath="/work/pa24/kpanag/variables/"
@@ -95,6 +96,8 @@ elif [ "$machine" == "HPC" ]; then
     profilingAnalysisPath="/work/pa24/kpanag/performance/"
     emptyVariablesPath="/work/pa24/kpanag/performance/"
     hdf5ContentsFileName="hdf_files_${year}${month}"
+    getsuffixPath="/work/pa24/kpanag/develop_scripts/"
+
 else
     echo "Invalid path type. Use 'REG' or 'HPC'."
     exit 1
@@ -115,7 +118,7 @@ prepareAnalysis="${prepareAnalysisPath}${prepareAnalysisName}"
 variablesAnalysis="${variablesAnalysisPath}${variablesAnalysisName}"
 profilingAnalysis="${profilingAnalysisPath}${profilingAnalysisName}"
 emptyVariables="${emptyVariablesPath}${emptyVariablesName}"
-
+getsuffixScript="${getsuffixPath}${getsuffixName}"
 # Find the contents of the HDF5 file to find all trading stocks
 if [ -f "$hdf5OriginalFile" ]; then
     if [ ! -f "$hdf5ContentsFile" ]; then
@@ -168,9 +171,14 @@ if [ -f "$hdf5OriginalFile" ]; then
                 date_str="${year}-${month}-${day}"
                 ctm_dataset_path="/${stock}/day${day}/ctm/"
                 complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/"
-                echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day"
-                #pass the arguments to the python script
-                python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile $emptyVariables
+                unique_suffix_values=$(python3.11 $getsuffixScript $hdf5OriginalFile $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile)
+                IFS=',' read -r -a suffix_array <<< "$unique_suffix_values"
+                for s in "${suffix_array[@]}"; do
+                    echo $s
+                    echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock suffix: $s , $year $month $day"
+                    #pass the arguments to the python script
+                    python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $s $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis 
+                done
             else
                 echo "The $stock was not traded on ${month}-${year}-${day}"
             fi

@@ -6,6 +6,7 @@ import cProfile
 import pstats
 import time
 import polars as pl
+from typing import List
 from datetime import timedelta
 from datetime import datetime
 from statsmodels.tsa.stattools import acf
@@ -47,8 +48,8 @@ def calculate_minute_variance(returns):
     return x.var()
 
 #Calculate the volatility
-def calculate_minute_volatility(returns):
-    x = returns.to_numpy()
+def calculate_minute_volatility(series):
+    x = series.to_numpy()
     x = x[~np.isnan(x)]
     n = len(x)
     if n <= 1:
@@ -56,8 +57,8 @@ def calculate_minute_volatility(returns):
     return x.std()
 
 #Calculate the partial autocorrelation
-def calculate_autocorrelation_v1(returns, lag=1):
-    x = returns.to_numpy()
+def calculate_autocorrelation_v1(series, lag=1):
+    x = series.to_numpy()
     x = x[~np.isnan(x)]
     if len(x) <= lag:
         return np.nan
@@ -65,9 +66,10 @@ def calculate_autocorrelation_v1(returns, lag=1):
         return np.nan
     return np.corrcoef(x[:-lag], x[lag:])[0, 1]
 
+
 #Calculate the non-partial autocorrelation
-def calculate_autocorrelation_v2(returns, lag=1):
-    x = returns.to_numpy()
+def calculate_autocorrelation_v2(series, lag=1):
+    x = series.to_numpy()
     x = x[~np.isnan(x)]
     if len(x) < lag:
         return np.nan
@@ -130,12 +132,41 @@ def apply_oib_aggregations(df):
         return None
 
     resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg([
-    pl.col('OIB_SHR').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('OIB_SHR_volatility_s'),
-    pl.col('OIB_SHR').map_elements(calculate_autocorrelation_v1, return_dtype=pl.Float64).alias('OIB_SHR_autocorr_s'),
-    pl.col('OIB_NUM').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('OIB_NUM_volatility_s'),
-    pl.col('OIB_NUM').map_elements(calculate_autocorrelation_v1, return_dtype=pl.Float64).alias('OIB_NUM_autocorr_s'),
-    pl.col('OIB_DOLL').map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias('OIB_DOLL_volatility_s'),
-    pl.col('OIB_DOLL').map_elements(calculate_autocorrelation_v1, return_dtype=pl.Float64).alias('OIB_DOLL_autocorr_s'),
+        pl.map_groups(
+            exprs=["OIB_SHR"],
+            function=lambda groups: calculate_minute_volatility(groups[0]),
+            return_dtype=pl.Float64
+        ).alias('OIB_SHR_volatility_s'),
+        pl.map_groups(
+            exprs=["OIB_SHR"],
+            function=lambda groups: calculate_autocorrelation_v1(groups[0], lag=5),
+            return_dtype=pl.Float64
+        ).alias('OIB_SHR_autocorr5_s'),
+        pl.map_groups(
+            exprs=["OIB_SHR"],
+            function=lambda groups: calculate_autocorrelation_v1(groups[0]),
+            return_dtype=pl.Float64
+        ).alias('OIB_SHR_autocorr_s'),
+        pl.map_groups(
+            exprs=["OIB_NUM"],
+            function=lambda groups: calculate_minute_volatility(groups[0]),
+            return_dtype=pl.Float64
+        ).alias('OIB_NUM_volatility_s'),
+        pl.map_groups(
+            exprs=["OIB_NUM"],
+            function=lambda groups: calculate_autocorrelation_v1(groups[0]),
+            return_dtype=pl.Float64
+        ).alias('OIB_NUM_autocorr_s'),
+        pl.map_groups(
+            exprs=["OIB_DOLL"],
+            function=lambda groups: calculate_minute_volatility(groups[0]),
+            return_dtype=pl.Float64
+        ).alias('OIB_DOLL_volatility_s'),
+        pl.map_groups(
+            exprs=["OIB_DOLL"],
+            function=lambda groups: calculate_autocorrelation_v1(groups[0]),
+            return_dtype=pl.Float64
+        ).alias('OIB_DOLL_autocorr_s')
     ])
     return resampled_df.to_pandas().set_index('time')
         
@@ -156,10 +187,17 @@ def apply_return_aggregations(pl_df, column='returns', sign=False, outside_tradi
     interval = '30m' if outside_trading else '1m'
 
     resampled_df = pl_df.group_by_dynamic('time', every=interval, closed='left', label='left').agg([
-        pl.col(column).map_elements(calculate_minute_volatility, return_dtype=pl.Float64).alias(volatility_col_name),
-        pl.col(column).map_elements(calculate_autocorrelation_v1, return_dtype=pl.Float64).alias(autocorr_col_name),
+        pl.map_groups(
+            exprs=[column],
+            function=lambda groups: calculate_minute_volatility(groups[0]),
+            return_dtype=pl.Float64
+        ).alias(volatility_col_name),
+        pl.map_groups(
+            exprs=[column],
+            function=lambda groups: calculate_autocorrelation_v1(groups[0]),
+            return_dtype=pl.Float64
+        ).alias(autocorr_col_name)
     ])
-    
     return resampled_df.to_pandas().set_index('time')
 
     #Calculate only the variance of returns
@@ -169,7 +207,12 @@ def apply_ret_variances_aggregations(pl_df, name, column='returns'):
     if pl_df.shape[0] == 1:
         return None
     resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg([
-    pl.col(column).map_elements(calculate_minute_variance, return_dtype=pl.Float64).alias(name)])
+        pl.map_groups(
+            exprs=[column],
+            function=lambda groups: calculate_minute_variance(groups[0]),
+            return_dtype=pl.Float64
+        ).alias(name)
+    ])
     return resampled_df.to_pandas().set_index('time')
 
 

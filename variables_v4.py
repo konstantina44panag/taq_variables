@@ -6,6 +6,7 @@ import numpy as np
 import argparse
 import cProfile
 import pstats
+import argparse
 import time
 import polars as pl
 from datetime import timedelta
@@ -27,6 +28,7 @@ parser.add_argument(
 )
 parser.add_argument("base_date", type=str, help="Base date for the analysis.")
 parser.add_argument("stock_name", type=str, help="Stock symbol.")
+parser.add_argument("s", type=str, help="Stock suffix.")
 parser.add_argument("year", type=str, help="Year of the data.")
 parser.add_argument("month", type=str, help="Month of the data.")
 parser.add_argument("day", type=str, help="Day of the data.")
@@ -80,6 +82,7 @@ def main():
             args.hdf5_file_path,
             args.base_date,
             args.stock_name,
+            args.s,
             args.year,
             args.month,
             args.day,
@@ -401,7 +404,7 @@ def main():
     
 
     #Function for saving the variable datasets in a new HDF5 file
-    def process_and_save_df(df, hdf5_variable_path, stock_name, day, month, year, time_range_name, category_name=None):
+    def process_and_save_df(df, hdf5_variable_path, stock_name, s, day, month, year, time_range_name, category_name=None):
         if not df.empty:
             # Convert object columns to string
             for col in df.columns:
@@ -417,12 +420,12 @@ def main():
             
             # Save data to HDF5 file
             with pd.HDFStore(hdf5_variable_path, mode="a", complevel=9, complib="zlib") as store:
-                hdf5_key = f"/{stock_name}/day{day}/{time_range_name}"
+                hdf5_key = f"/{stock_name}/suffix_{s}/day{day}/{time_range_name}"
                 if category_name:
                     hdf5_key += f"/{category_name}"
                 store.append(hdf5_key, df, format="table", data_columns=True, index=False)
         else:
-            message = f"{stock_name} has empty time bars for {day}/{month}/{year} and category: {category_name} {time_range_name}.\n"         
+            message = f"{stock_name}, suffix {s}, has empty time bars for {day}/{month}/{year} and category: {category_name} {time_range_name}.\n"         
             try:
                 with open(args.emp_analysis_path, "a") as f:
                     f.write(message)
@@ -433,23 +436,23 @@ def main():
 
     #Call saving function for groups daily_auction, inside_trading, outside_trading
     if auction_conditions_df is not None:
-        process_and_save_df(auction_conditions_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_auction_summary")
+        process_and_save_df(auction_conditions_df, args.hdf5_variable_path, args.stock_name, args.s, args.day, args.month, args.year, "daily_auction_summary")
     if daily_inside_df is not None:
-        process_and_save_df(daily_inside_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_trade_summary", "inside_trading")
+        process_and_save_df(daily_inside_df, args.hdf5_variable_path, args.stock_name, args.s, args.day, args.month, args.year, "daily_trade_summary", "inside_trading")
     if daily_outside_df is not None:
-        process_and_save_df(daily_outside_df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "daily_trade_summary", "outside_trading")
+        process_and_save_df(daily_outside_df, args.hdf5_variable_path, args.stock_name, args.s, args.day, args.month, args.year, "daily_trade_summary", "outside_trading")
 
     for category, df in merged_data.items():
         if df is not None:
             df.reset_index(inplace=True)
             df.rename(columns={'index': 'time'}, inplace=True)
-            process_and_save_df(df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "inside_trading", category)
+            process_and_save_df(df, args.hdf5_variable_path, args.stock_name, args.s, args.day, args.month, args.year, "inside_trading", category)
 
     for category, df in merged_outside_trading_data.items():
         if df is not None:
             df.reset_index(inplace=True)
             df.rename(columns={'index': 'time'}, inplace=True)
-            process_and_save_df(df, args.hdf5_variable_path, args.stock_name, args.day, args.month, args.year, "outside_trading", category)
+            process_and_save_df(df, args.hdf5_variable_path, args.stock_name, args.s, args.day, args.month, args.year, "outside_trading", category)
 
         write_end_time = time.time()
 
@@ -457,6 +460,7 @@ def main():
     if args.var_analysis_path is not None and args.stock_name == "IBM":
         with open(args.var_analysis_path, "a") as f:
             f.write(f"Stock: {args.stock_name}\n")
+            f.write(f"\nSuffix: {args.s}\n")
             f.write(f"Day: {args.day}\n")
             f.write(f"Only the calculation runtime: {main_end_time - main_start_time} seconds\n")
             f.write(f"Only the auction processing: {end_auction_time - start_auction_time} seconds\n")
@@ -481,6 +485,7 @@ if __name__ == "__main__":
         try:
             with open(args.prof_analysis_path, "a") as f:
                 f.write(f"\nStock: {args.stock_name}\n")
+                f.write(f"\nSuffix: {args.s}\n")
                 ps = pstats.Stats(pr, stream=f)
                 ps.strip_dirs().sort_stats(pstats.SortKey.CUMULATIVE).print_stats()
         except IOError as e:
