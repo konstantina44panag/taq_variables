@@ -273,9 +273,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         trades = decode_byte_strings(trades)
         nbbos = decode_byte_strings(nbbos)
         decode_end_time = time.time()
-
-        logging.info("Cleaning data")
-        
+     
         #Applying formatting to trades
         format_start_time = time.time()
         trades["TIME_M"] = np.array(trades["TIME_M"], dtype=np.float64)
@@ -461,7 +459,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, year, month, day, me
         Bid.reset_index(drop=True, inplace=True)
 
         trsigns_start_time = time.time()
-        logging.info("Estimating trade signs")
         analyzer = TradeAnalyzer(trades, Ask, Bid)
         tradessigns = analyzer.classify_trades()
         trsigns_end_time = time.time()
