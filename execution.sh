@@ -24,13 +24,12 @@ year=$2
 month=$(printf "%02d" $((10#$3)))
 shift 3
 
-# Skip over the first '--' delimiter
 shift
 
 days=()
 stocks=()
+specific_stock=""
 
-# Loop through arguments until we encounter the second '--'
 while [[ $# -gt 0 && "$1" != '--' ]]; do
     if [[ "$1" != "all" ]]; then
         days+=("$1")
@@ -39,14 +38,24 @@ while [[ $# -gt 0 && "$1" != '--' ]]; do
     fi
     shift
 done
-
 # Skip over the second '--' delimiter
 shift
 
-while [[ $# -gt 0 ]]; do
+# Loop through arguments until we encounter the third '--' or end of arguments
+while [[ $# -gt 0 && "$1" != '--' ]]; do
     stocks+=("$1")
     shift
 done
+
+# Skip over the third '--' delimiter if it exists
+if [[ $# -gt 0 ]]; then
+    shift
+fi
+
+# If there is one more argument, it is the specific stock
+if [[ $# -gt 0 ]]; then
+    specific_stock="$1"
+fi
 
 # Get the current directory
 current_dir=$(pwd)
@@ -115,7 +124,10 @@ if [ -f "$hdf5OriginalFile" ]; then
     IFS=$'\n'
     if [ ${#days[@]} -eq 1 ] && [ "${days[0]}" != "all" ]; then
         day=${days[0]}
-        available_stocks=($(grep "/day${day}/ctm/table" "$hdf5ContentsFile" | sed -E 's|/([^/]+)/day[0-9][0-9]/ctm/table.*|\1|' | sort | uniq))
+        available_stocks=($(grep "/day${day}/ctm/table" "$hdf5ContentsFile"| sed -E "s|/([^/]+)/day${day}/ctm/table.*|\\1|" | sort | uniq))
+        if [[ -n "$specific_stock" ]]; then
+            available_stocks=($(printf "%s\n" "${available_stocks[@]}" | awk -v stock="$specific_stock" 'BEGIN {found=0} {if ($0 >= stock) found=1} found')) #or >
+        fi
     else
         available_stocks=($(grep '/day[0-9][0-9]/ctm/table' "$hdf5ContentsFile" | sed -E 's|/([^/]+)/day[0-9][0-9]/ctm/table.*|\1|' | sort | uniq))
     fi
@@ -164,6 +176,7 @@ if [ -f "$hdf5OriginalFile" ]; then
             IFS=',' read -r -a suffix_array <<< "$unique_suffix_values"
             for s in "${suffix_array[@]}"; do
                 python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $s $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis --empty_variables_path $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis
+                echo "Executed for: $date_str, Stock: $stock, Suffix: $s, HDF5: $hdf5OriginalFile, Variables in $hdf5VariableFile"
             done
         done
     done

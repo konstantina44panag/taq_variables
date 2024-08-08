@@ -14,7 +14,6 @@ from datetime import datetime
 from statsmodels.tsa.stattools import acf
 from preparation import prepare_datasets, NoTradesException, NoNbbosException
 from aggregation_functions import auction_conditions, reindex_to_full_time, flatten_dict, calculate_oib_metrics, apply_oib_aggregations, apply_return_aggregations,apply_ret_variances_aggregations, apply_aggregations, apply_quote_aggregations, apply_midpoint_aggregations, process_resample_data, process_daily, calculate_Herfindahl
-pd.set_option('display.max_rows', 300)
 
 class NoTradesException(Exception):
     pass
@@ -94,7 +93,7 @@ def main():
 
         if result is None:
             print(f"Dataframes return as None from preparation for {args.stock_name} on {args.base_date}.")
-            return
+            
 
         trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Buys_Retail_trades, Sells_Retail_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result
 

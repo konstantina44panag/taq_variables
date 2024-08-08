@@ -232,7 +232,7 @@ def apply_aggregations(df_filtered, df_name, outside_trading=False):
     try:
         #Group the dataframe to 1-second intervals and count the events inside
         seconds_df = pl_df.group_by_dynamic('time', every=interval_seconds, closed='left', label='left').agg([
-            pl.count('price').alias('count')
+            pl.col('price').count().alias('count')
         ])
 
         #Compute the variable: maximum events in the seconds per minute
@@ -256,9 +256,10 @@ def apply_aggregations(df_filtered, df_name, outside_trading=False):
             pl.col('price').mean().alias('avg_price'),
             pl.col('vol').mean().alias('avg_vol'),
             pl.col('vol').sum().alias('tot_vol'),
+            pl.col('value').sum().alias('tot_value'),
             calculate_vwap_pl().alias('vwap'),
             calculate_twap_pl().alias('twap'),
-            pl.count('price').alias('num_events')
+            pl.col('price').count().alias('num_events')
         ]
         if df_name in ['Buys_trades', 'Buys_Oddlot_trades', 'Buys_Retail_trades']:
             aggregations.append(pl.col('pNextSell_tob').mean().alias('pNextSell_avg'))
@@ -303,7 +304,7 @@ def apply_quote_aggregations(df_filtered, df_name, outside_trading=False):
     try:
         #Group the dataframe to 1-second intervals and count the events inside
         seconds_df = pl_df.group_by_dynamic('time', every=interval_seconds, closed='left', label='left').agg([
-            pl.count('price').alias('count')
+            pl.col('price').count().alias('count')
         ])
 
         #Compute the variable: maximum events in the seconds per minute
@@ -321,7 +322,7 @@ def apply_quote_aggregations(df_filtered, df_name, outside_trading=False):
             
         #Find the trading halts, or news event indicator
         def encode_conditions_expr():
-            valid_chars = 'DIJKLMNOPQRSTVYZ124'
+            valid_chars = 'CDEFGIJKLMNOPQRSTUVXYZ01234'
             return pl.col('qu_cond').map_elements(
                 lambda x: ''.join(sorted(set([c for c in x if c in valid_chars]))), return_dtype=pl.Utf8
             )
@@ -333,9 +334,10 @@ def apply_quote_aggregations(df_filtered, df_name, outside_trading=False):
             pl.col('price').mean().alias('avg_price'),
             pl.col('vol').mean().alias('avg_vol'),
             pl.col('vol').sum().alias('tot_vol'),
+            pl.col('value').sum().alias('tot_value'),
             calculate_vwap_pl().alias('vwap'),
             calculate_twap_pl().alias('twap'),
-            pl.count('price').alias('num_events'),
+            pl.col('price').count().alias('num_events'),
             encode_conditions_expr().alias('halt_indic')
         ]
 
@@ -369,7 +371,7 @@ def apply_midpoint_aggregations(df_filtered, outside_trading=False):
     try:
         #Group the dataframe to 1-second intervals and count the events inside
         seconds_df = pl_df.group_by_dynamic('time', every=interval_seconds, closed='left', label='left').agg([
-            pl.count('price').alias('count')
+            pl.col('price').count().alias('count')
         ])
 
         #Compute the variable: maximum events in the seconds per minute
@@ -379,7 +381,7 @@ def apply_midpoint_aggregations(df_filtered, outside_trading=False):
 
         #Count the number of events
         aggregations = [
-            pl.count('price').alias('num_events'),
+            pl.col('price').count().alias('num_events')
         ]
 
         resampled_df = pl_df.group_by_dynamic('time', every=interval_minutes, closed='left', label='left').agg(aggregations)
