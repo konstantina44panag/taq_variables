@@ -18,7 +18,7 @@ def reindex_to_full_time(df, base_date, outside_trading=False):
         return None
     
     if outside_trading:
-        morning_index = pd.date_range(start=f"{base_date} 03:30", end=f"{base_date} 09:29", freq="30min")
+        morning_index = pd.date_range(start=f"{base_date} 04:00", end=f"{base_date} 09:29", freq="30min")
         evening_index = pd.date_range(start=f"{base_date} 16:00", end=f"{base_date} 22:00", freq="30min")
         full_time_index = morning_index.union(evening_index)
     else:
