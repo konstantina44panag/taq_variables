@@ -43,22 +43,9 @@ done
 # Skip over the second '--' delimiter
 shift
 
-# Check if there are any remaining arguments (optional method and freq)
 while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --method)
-            method=$2
-            shift 2
-            ;;
-        --freq)
-            freq=$2
-            shift 2
-            ;;
-        *)
-            stocks+=("$1")
-            shift
-            ;;
-    esac
+    stocks+=("$1")
+    shift
 done
 
 # Get the current directory
@@ -97,7 +84,6 @@ elif [ "$machine" == "HPC" ]; then
     emptyVariablesPath="/work/pa24/kpanag/performance/"
     hdf5ContentsFileName="hdf_files_${year}${month}"
     getsuffixPath="/work/pa24/kpanag/develop_scripts/"
-
 else
     echo "Invalid path type. Use 'REG' or 'HPC'."
     exit 1
@@ -127,7 +113,12 @@ if [ -f "$hdf5OriginalFile" ]; then
 
     # Find all trading stocks from the contents
     IFS=$'\n'
-    available_stocks=($(grep '/day[0-9][0-9]/ctm/table' "$hdf5ContentsFile" | sed -E 's|/([^/]+)/day[0-9][0-9]/ctm/table.*|\1|' | sort | uniq))
+    if [ ${#days[@]} -eq 1 ] && [ "${days[0]}" != "all" ]; then
+        day=${days[0]}
+        available_stocks=($(grep "/day${day}/ctm/table" "$hdf5ContentsFile" | sed -E 's|/([^/]+)/day[0-9][0-9]/ctm/table.*|\1|' | sort | uniq))
+    else
+        available_stocks=($(grep '/day[0-9][0-9]/ctm/table' "$hdf5ContentsFile" | sed -E 's|/([^/]+)/day[0-9][0-9]/ctm/table.*|\1|' | sort | uniq))
+    fi
     unset IFS
 
     # Create a list of invalid stocks
@@ -143,45 +134,37 @@ if [ -f "$hdf5OriginalFile" ]; then
             continue
         fi
 
-        # Find all available days when the stock was traded, from the hdf5 contents
-        IFS=$'\n'
-        available_days=($(grep "/${stock}/day[0-9][0-9]/ctm/table" "$hdf5ContentsFile" | sed -E 's|.*/day([0-9][0-9])/ctm/table.*|\1|' | sort | uniq))
-        unset IFS
-
-        if [ ${#available_days[@]} -eq 0 ]; then
-            echo "No transactions found for stock $stock in month ${month}-${year}"
-            continue
-        fi
-
         #If the argument is to execute all days, then  all days will be the list of the loop, otherwise the list of loop is the list of day arguments
         if [ "${days[0]}" == "all" ]; then
+            IFS=$'\n'
+            available_days=($(grep "/${stock}/day[0-9][0-9]/ctm/table" "$hdf5ContentsFile" | sed -E 's|.*/day([0-9][0-9])/ctm/table.*|\1|' | sort | uniq))
+            unset IFS
+            if [ ${#available_days[@]} -eq 0 ]; then
+                echo "No transactions found for stock $stock in month ${month}-${year}"
+                continue
+            fi
             days=("${available_days[@]}")
         fi
 
-        available_days_str=$(printf "%s\n" "${available_days[@]}")
-        
         #For every day in the list of days:
         for day in "${days[@]}"; do
             #In case the list of the loop is a list from the arguments, then check that each day exists in the available days when the stock traded
-            if echo "$available_days_str" | grep -qx "$day"; then
-                #The variable file name should be defined here, because it depends on the day
-                hdf5VariableFileName="${year}${month}${day}_variables.h5"
-                hdf5VariableFile="${hdf5VariableFilePath}${hdf5VariableFileName}"
-                #Construct the paths inside the hdf5 file
-                date_str="${year}-${month}-${day}"
-                ctm_dataset_path="/${stock}/day${day}/ctm/"
-                complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/"
-                unique_suffix_values=$(python3.11 $getsuffixScript $hdf5OriginalFile $date_str $stock $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile)
-                IFS=',' read -r -a suffix_array <<< "$unique_suffix_values"
-                for s in "${suffix_array[@]}"; do
-                    echo $s
-                    echo "Executing: $pythonScript $hdf5OriginalFile $date_str $stock suffix: $s , $year $month $day"
-                    #pass the arguments to the python script
-                    python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $s $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis $emptyVariables --var_analysis_path $variablesAnalysis 
-                done
-            else
+            #The variable file name should be defined here, because it depends on the day
+            hdf5VariableFileName="${year}${month}${day}_variables.h5"
+            hdf5VariableFile="${hdf5VariableFilePath}${hdf5VariableFileName}"
+            #Construct the paths inside the hdf5 file
+            date_str="${year}-${month}-${day}"
+            ctm_dataset_path="/${stock}/day${day}/ctm/"
+            complete_nbbo_dataset_path="/${stock}/day${day}/complete_nbbo/"
+            unique_suffix_values=$(python3.11 $getsuffixScript $hdf5OriginalFile $ctm_dataset_path)
+            if [ "$unique_suffix_values" == "None" ]; then
                 echo "The $stock was not traded on ${month}-${year}-${day}"
+                continue
             fi
+            IFS=',' read -r -a suffix_array <<< "$unique_suffix_values"
+            for s in "${suffix_array[@]}"; do
+                python3.11 $pythonScript $hdf5OriginalFile $date_str $stock $s $year $month $day $ctm_dataset_path $complete_nbbo_dataset_path $hdf5VariableFile --prep_analysis_path $prepareAnalysis --empty_variables_path $emptyVariables --var_analysis_path $variablesAnalysis --prof_analysis_path $profilingAnalysis
+            done
         done
     done
 else

@@ -32,8 +32,6 @@ parser.add_argument("s", type=str, help="Stock suffix.")
 parser.add_argument("year", type=str, help="Year of the data.")
 parser.add_argument("month", type=str, help="Month of the data.")
 parser.add_argument("day", type=str, help="Day of the data.")
-parser.add_argument("--method", type=str, help="Trade sign algorithm")
-parser.add_argument("--freq", type=int, help="Frequency of trade sign algorithm")
 parser.add_argument(
     "ctm_dataset_path",
     type=str,
@@ -86,8 +84,6 @@ def main():
             args.year,
             args.month,
             args.day,
-            args.method,
-            args.freq,
             args.ctm_dataset_path,
             args.complete_nbbo_dataset_path,
             args.hdf5_variable_path,
@@ -97,7 +93,7 @@ def main():
             args.prof_analysis_path)
 
         if result is None:
-            print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
+            print(f"Dataframes return as None from preparation for {args.stock_name} on {args.base_date}.")
             return
 
         trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Buys_Retail_trades, Sells_Retail_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result

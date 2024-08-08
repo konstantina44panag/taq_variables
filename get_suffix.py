@@ -18,27 +18,10 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "hdf5_file_path", type=str, help="The path to the original HDF5 file."
 )
-parser.add_argument("base_date", type=str, help="Base date for the analysis.")
-parser.add_argument("stock_name", type=str, help="Stock symbol.")
-parser.add_argument("year", type=str, help="Year of the data.")
-parser.add_argument("month", type=str, help="Month of the data.")
-parser.add_argument("day", type=str, help="Day of the data.")
-parser.add_argument("--method", type=str, help="Trade sign algorithm")
-parser.add_argument("--freq", type=int, help="Frequency of trade sign algorithm")
 parser.add_argument(
     "ctm_dataset_path",
     type=str,
     help="The dataset path within the HDF5 file for ctm data.",
-)
-parser.add_argument(
-    "complete_nbbo_dataset_path",
-    type=str,
-    help="The dataset path within the HDF5 file for complete nbbo data.",
-)
-parser.add_argument(
-    "hdf5_variable_path",
-    type=str,
-    help="The path and name of the output variable file",
 )
 
 args, unknown = parser.parse_known_args()
@@ -68,7 +51,7 @@ def load_trades_dataset(
         return df
 
     except tables.NoSuchNodeError as e:
-        raise ValueError(f"Dataset path not found: {dataset_path}")
+        return None
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
         
@@ -96,13 +79,15 @@ def get_unique_suffix_values(df):
 
 
 with tables.open_file(args.hdf5_file_path, "r") as hdf:
-            trades = load_trades_dataset(
-                hdf,
-                args.ctm_dataset_path,
-                suf_pattern="SUF",
-            )
-
-trades = decode_byte_strings(trades)
-trades["suffix"] =  trades["suffix"].astype(str)
-unique_suffix_values = get_unique_suffix_values(trades)
-print(",".join(unique_suffix_values))
+    trades = load_trades_dataset(
+        hdf,
+        args.ctm_dataset_path,
+        suf_pattern="SUF",
+    )
+if trades is None:
+    print("None")
+else:
+    trades = decode_byte_strings(trades)
+    trades["suffix"] = trades["suffix"].astype(str)
+    unique_suffix_values = get_unique_suffix_values(trades)
+    print(",".join(unique_suffix_values))

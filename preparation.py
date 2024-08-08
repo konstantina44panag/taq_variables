@@ -122,7 +122,7 @@ def decode_byte_strings(df):
 
 
 #def handle_duplicates: For cleaning data with the same timestamps, by using the median price and aggregating the volume
-def handle_duplicates(pl_df, key_col, value_cols, sum_col=None, other_cols=None, join_col=None):
+def handle_duplicates(pl_df, key_col, value_col=None, sum_col=None, other_col=None, join_col=None):
     """
     Handle duplicates using Polars by taking the median for the value columns, the sum for the sum_col,
     and the last value for other columns. If other_cols is not provided, only the value_cols and sum_col 
@@ -135,14 +135,13 @@ def handle_duplicates(pl_df, key_col, value_cols, sum_col=None, other_cols=None,
     duplicates_mask = pl_df.with_columns(pl.col(key_col).is_duplicated().alias("is_duplicated"))
     duplicates = duplicates_mask.filter(pl.col("is_duplicated")).drop("is_duplicated")
     non_duplicates = duplicates_mask.filter(~pl.col("is_duplicated")).drop("is_duplicated")
-
-    agg_exprs = [pl.col(col).median().alias(col) for col in value_cols]
-    
+    agg_exprs = []
     if sum_col:
-        agg_exprs.extend([pl.col(col).sum().alias(col) for col in sum_col])
-        
-    if other_cols:
-        agg_exprs.extend([pl.col(col).last().alias(col) for col in other_cols])
+        agg_exprs.extend([pl.col(col).median().alias(col) for col in value_col])
+    if sum_col:
+        agg_exprs.extend([pl.col(col).sum().alias(col) for col in sum_col])   
+    if other_col:
+        agg_exprs.extend([pl.col(col).last().alias(col) for col in other_col])
     if join_col:
         agg_exprs.extend([pl.col(col).str.concat(",") for col in join_col])
    
@@ -234,12 +233,12 @@ def rolling_mad_exclude_self(a, W):
     
     return mads
 
-dummy_data = np.random.rand(100)
+dummy_data = np.random.rand(50)
 _ = rolling_median_exclude_self(dummy_data, 5)
 _ = rolling_mad_exclude_self(dummy_data, 5)
 
 #def prepare_datasets: Contains the loading of data to dataframes and applies the appropriate operations, this function is called by the python script variables_v4.py which then calculates variables
-def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day, method, freq, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path, prep_analysis_path=None, emp_analysis_path=None, var_analysis_path=None, prof_analysis_path=None):
+def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day, ctm_dataset_path, complete_nbbo_dataset_path, hdf5_variable_path, prep_analysis_path=None, emp_analysis_path=None, var_analysis_path=None, prof_analysis_path=None):
     try:
         load_start_time = time.time()
 
@@ -285,7 +284,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day,
         if trades.empty:
             raise NoTradesException()
         if nbbos.empty:
-            raise NoTradesException()
+            raise NoNbbosException()
 
         #Applying formatting to trades
         format_start_time = time.time()
@@ -320,107 +319,110 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day,
         
         format_end_time = time.time()
         #Data cleaning for trades
-        clean_only_start_time = time.time()
+        clean_start_time = time.time()
        
         #Remove nan or zero prices, P2 cleaning step in Taq Cleaning Techniques google doc 
         mask = (~np.isnan(trades['price'].values)) & (trades['price'].values != 0)
-        trades = trades.loc[mask]
-
-        #switch to polars dataframe
+        trades = trades[mask].copy()
         pl_trades = pl.from_pandas(trades)
-
-        #Check for empty dataframe after the cleaning step, otherwise an error will occur on next operations. If the trades are empty the program returns the message and calculations are skipped for this stock-day
         if pl_trades.height == 0:
             raise NoTradesException()
 
         #Cleaning step T1 
         pl_trades = pl_trades.filter(pl_trades['corr'].is_in(['00', '01', '02']))
-
-        #Check for empty dataframe after the cleaning step
         if pl_trades.height == 0:
             raise NoTradesException()
             
         #Cleaning step T3
-        pl_trades = handle_duplicates(pl_trades, key_col=['datetime'], value_cols=['price'], sum_col=['vol'], other_cols=['time', "corr"], join_col=['cond', "EX"])
-
-        #switch to pandas
+        pl_trades = handle_duplicates(pl_trades, key_col=['datetime'], value_col=['price'], sum_col=['vol'], other_col=['time', "corr"], join_col=['cond', "EX"])
         trades = pl_trades.to_pandas()
         trades.reset_index(drop=True)
       
         #Cleaning nbbos
-        #Remove nan or zero quotes, cleaning step P2*
-        mask = (~np.isnan(nbbos['BEST_ASK'].values)) & (~np.isnan(nbbos['BEST_BID'].values)) & (nbbos['BEST_ASK'].values != 0) & (nbbos['BEST_BID'].values != 0)
-        nbbos = nbbos.loc[mask]        
-        #H&j
-        pl_nbbos = pl.from_pandas(nbbos)
-        #mask1 = (pl.col("BEST_ASK") <= 0) & (pl.col("BEST_BID") <= 0)
-        #mask2 = (pl.col("Best_AskSizeShares") <= 0) & (pl.col("Best_BidSizeShares") <= 0)
-        #mask3 = pl.col("BEST_ASK").is_null() & pl.col("BEST_BID").is_null()
-        #mask4 = pl.col("Best_AskSizeShares").is_null() & pl.col("Best_BidSizeShares").is_null()
-
-        # Combine masks
-        #combined_mask = ~(mask1 | mask2 | mask3 | mask4)
-        #pl_nbbos = pl_nbbos.filter(combined_mask)
-        
-        #Check for empty dataframe after the cleaning step
-        if pl_nbbos.height == 0:
-            raise NoNbbosException()
-        
-        #Cleaning Step Q1
-        pl_nbbos = handle_duplicates(pl_nbbos, key_col='datetime', value_cols=['BEST_ASK', 'BEST_BID'],  sum_col=['Best_AskSizeShares', 'Best_BidSizeShares'], other_cols=['time', 'qu_cond'])
-
-        #Cleaning Step Q2
-        pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] > pl_nbbos['BEST_BID'])
-        
-        if pl_nbbos.height == 0:
-            raise NoNbbosException()
-
-        #Cleaning Step Q3
-        pl_nbbos = pl_nbbos.with_columns((pl_nbbos['BEST_ASK'] - pl_nbbos['BEST_BID']).alias('spread'))
-        med_spread = pl_nbbos['spread'].median()
-        pl_nbbos = pl_nbbos.filter(pl_nbbos['spread'] <= 50 * med_spread)
-
-        #Check for empty dataframe after the cleaning step
-        if pl_nbbos.height == 0:
-            raise NoNbbosException()
-            
-        #Create Midpoint
-        pl_nbbos = pl_nbbos.with_columns(((pl_nbbos['BEST_BID'] + pl_nbbos['BEST_ASK']) / 2).alias('midpoint'))
-        #H&J
-        #pl_nbbos = pl_nbbos.with_columns(
-        #    [
-        #        pl.col("Midpoint").shift(1).alias("lmid")
-        #    ]
-        #)
-        #pl_nbbos = pl_nbbos.with_columns(
-        #    [
-        #        pl.when(pl.col("lmid").is_null())
-        #        .then(None).otherwise(pl.col("lmid")).alias("lmid")
-        #    ]
-        #)
-        #pl_nbbos = pl_nbbos.with_columns(
-        #    [
-        #        (pl.col("lmid") - 2.5).alias("lm25"),
-        #        (pl.col("lmid") + 2.5).alias("lp25")
-        #    ]
-        #)
-
-        #switch to pandas
-        nbbos = pl_nbbos.to_pandas()
-        nbbos.reset_index(drop=True)
-
-        #Cleaning Step Q4
-        nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 50)
-        nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 50)
-        nbbos['exclude'] = np.abs(nbbos['midpoint'] - nbbos['rolling_median']) > 10 * nbbos['rolling_mad']
-        nbbos = nbbos[~nbbos['exclude']]
-        nbbos = nbbos.drop(columns=['rolling_median', 'rolling_mad', 'exclude'])
-        
-        #Check for empty dataframe after the cleaning step
+        mask = (
+            ((nbbos['BEST_ASK'] <= 0) & (nbbos['BEST_BID'] <= 0)) |
+            ((nbbos['Best_AskSizeShares'] <= 0) & (nbbos['Best_BidSizeShares'] <= 0)) |
+            (np.isnan(nbbos['BEST_ASK'].values) & (np.isnan(nbbos['BEST_BID'].values))) |
+            (np.isnan(nbbos['Best_AskSizeShares'].values) & (np.isnan(nbbos['Best_BidSizeShares'].values)))
+        )
+        nbbos = nbbos[~mask].copy()
         if nbbos.empty:
             raise NoNbbosException()
 
-        clean_only_end_time = time.time()
+        best_bid = nbbos['BEST_BID'].to_numpy()
+        best_bid_size = nbbos['Best_BidSizeShares'].to_numpy()
+        best_ask = nbbos['BEST_ASK'].to_numpy()
+        best_ask_size = nbbos['Best_AskSizeShares'].to_numpy()
+
+        @njit
+        def process_data(best_bid, best_bid_size, best_ask, best_ask_size):
+            n = len(best_bid)
+            midpoint = (best_bid + best_ask) / 2
+            spread = best_ask - best_bid           
+
+            for i in range(n):
+                if best_ask[i] <= 0:
+                    best_ask[i] = np.nan
+                    best_ask_size[i] = np.nan
+                if np.isnan(best_ask[i]):
+                    best_ask_size[i] = np.nan
+                if best_ask_size[i] <= 0:
+                    best_ask[i] = np.nan
+                    best_ask_size[i] = np.nan
+                if np.isnan(best_ask_size[i]):
+                    best_ask[i] = np.nan
+
+                if best_bid[i] <= 0:
+                    best_bid[i] = np.nan
+                    best_bid_size[i] = np.nan
+                if np.isnan(best_bid[i]):
+                    best_bid_size[i] = np.nan
+                if best_bid_size[i] <= 0:
+                    best_bid[i] = np.nan
+                    best_bid_size[i] = np.nan
+                if np.isnan(best_bid_size[i]):
+                    best_bid[i] = np.nan
+           
+            # Handle lmid, lm25, and lp25
+            lmid = np.empty(n)
+            lmid[0] = np.nan
+            lmid[1:] = midpoint[:-1]
+            lm25 = lmid - 2.5
+            lp25 = lmid + 2.5
+            
+            # Apply spread conditions
+            for i in range(n):
+                if spread[i] > 5:
+                    if best_bid[i] < lm25[i]:
+                        best_bid[i] = np.nan
+                        best_bid_size[i] = np.nan
+                    if best_ask[i] > lp25[i]:
+                        best_ask[i] = np.nan
+                        best_ask_size[i] = np.nan
+            
+            return best_bid, best_bid_size, best_ask, best_ask_size, midpoint, spread
+
+        # Process data
+        best_bid, best_bid_size, best_ask, best_ask_size, midpoint, spread = process_data(best_bid, best_bid_size, best_ask, best_ask_size)
+        # Update DataFrame
+        nbbos['BEST_BID'], nbbos['Best_BidSizeShares'], nbbos['BEST_ASK'], nbbos['Best_AskSizeShares'], nbbos['midpoint'], nbbos['spread'] = best_bid, best_bid_size, best_ask, best_ask_size, midpoint, spread
+
+        # Remove rows based on changes in specific columns
+        mask = (
+            (nbbos['BEST_ASK'] != nbbos['BEST_ASK'].shift(1)) |
+            (nbbos['BEST_BID'] != nbbos['BEST_BID'].shift(1)) |
+            (nbbos['Best_AskSizeShares'] != nbbos['Best_AskSizeShares'].shift(1)) |
+            (nbbos['Best_BidSizeShares'] != nbbos['Best_BidSizeShares'].shift(1))
+        )
+        nbbos = nbbos[mask].copy()
+        if nbbos.empty:
+            raise NoNbbosException()
+        
+        #Cleaning Step Q1
+        pl_nbbos = pl.from_pandas(nbbos)
+        pl_nbbos = handle_duplicates(pl_nbbos, key_col='datetime', value_col=None,  sum_col=None, other_col=['time', 'BEST_ASK', 'BEST_BID', 'Best_AskSizeShares', 'Best_BidSizeShares', 'midpoint', 'spread'], join_col=['qu_cond'])
+        nbbos = pl_nbbos.to_pandas()
+        nbbos.reset_index(drop=True)
         
         #Define the appropriate dataframes for variable calculation
         #Define the Ask and Bid
@@ -432,13 +434,73 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day,
             ["time", "datetime", "BEST_BID", "Best_BidSizeShares", "qu_cond"]
         ].copy()
         Bid.rename(columns={"BEST_BID": "price", "Best_BidSizeShares": "vol"}, inplace=True)
-     
-        #Define the Midpoint
+        #Trade Signs estimation
+        trades.reset_index(drop=True, inplace=True)
+        Ask.reset_index(drop=True, inplace=True)
+        Bid.reset_index(drop=True, inplace=True)
+
+        trsigns_start_time = time.time()
+        analyzer = TradeAnalyzer(trades, Ask, Bid)
+        tradessigns = analyzer.classify_trades()
+        trsigns_end_time = time.time()
+        trsigns_time = trsigns_end_time - trsigns_start_time
+
+        #sort dataframes and rename columns after trade signing
+        tradessigns.sort_values(by='datetime', inplace=True)
+        tradessigns.rename(columns={"time": "time_float"}, inplace=True)
+        tradessigns.rename(columns={"datetime": "time"}, inplace=True)
+
+        #Now that trades are matched with a quote pair, continue with data cleaning
+        #apply cleaning step T4:
+        mask = tradessigns['ask'] > tradessigns['bid']
+        tradessigns = tradessigns[mask].copy()
+        tradessigns['spread'] = tradessigns['ask'] - tradessigns['bid']
+        tradessigns['upper_bound'] = tradessigns['ask'] + tradessigns['spread']
+        tradessigns['lower_bound'] = tradessigns['bid'] - tradessigns['spread']
+        mask= (tradessigns['price'] <= tradessigns['upper_bound']) & (tradessigns['price'] >= tradessigns['lower_bound'])
+        tradessigns = tradessigns[mask].copy()
+        tradessigns.drop(columns=['upper_bound', 'lower_bound'], inplace=True)
+        if tradessigns.empty:
+            raise NoTradesException()
+        
+        tradessigns.sort_values(by='time', inplace=True)
+        trades = tradessigns
+        
+        #Cleaning Step Q2
+        pl_nbbos = pl_nbbos.filter(pl_nbbos['BEST_ASK'] > pl_nbbos['BEST_BID'])
+        if pl_nbbos.height == 0:
+            raise NoNbbosException()
+
+        #Cleaning Step Q3
+        med_spread = pl_nbbos['spread'].median()
+        pl_nbbos = pl_nbbos.filter(pl_nbbos['spread'] <= 50 * med_spread)
+        if pl_nbbos.height == 0:
+            raise NoNbbosException()
+
+        nbbos = pl_nbbos.to_pandas()
+        #Cleaning Step Q4
+        nbbos['rolling_median'] = rolling_median_exclude_self(nbbos['midpoint'].values, 50)
+        nbbos['rolling_mad'] = rolling_mad_exclude_self(nbbos['midpoint'].values, 50)
+        nbbos['exclude'] = np.abs(nbbos['midpoint'] - nbbos['rolling_median']) > 10 * nbbos['rolling_mad']
+        nbbos = nbbos[~nbbos['exclude']]
+        nbbos = nbbos.drop(columns=['rolling_median', 'rolling_mad', 'exclude'])
+        if nbbos.empty:
+            raise NoNbbosException()
+
+        clean_end_time = time.time()
+        #Define the Ask and Bid, the Midpoint and nbbo signs
+        Ask = nbbos[
+            ["datetime", "BEST_ASK", "Best_AskSizeShares", "qu_cond"]
+        ].copy()
+        Ask.rename(columns={"BEST_ASK": "price", "Best_AskSizeShares": "vol", "datetime":"time"}, inplace=True)
+        Bid = nbbos[
+            ["datetime", "BEST_BID", "Best_BidSizeShares", "qu_cond"]
+        ].copy()
+        Bid.rename(columns={"BEST_BID": "price", "Best_BidSizeShares": "vol", "datetime":"time"}, inplace=True)
         Midpoint = nbbos[['datetime', 'midpoint']].copy()
         Midpoint.rename(
             columns={"datetime" : "time", "midpoint": "price"}, inplace=True
         )
-
         #Define the nbbo_signs
         best_bid = nbbos['BEST_BID'].values
         best_bid_size_shares = nbbos['Best_BidSizeShares'].values
@@ -464,48 +526,6 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day,
         trades['value'] = trades['price'] * trades['vol'] 
         Ask['value'] = Ask['price'] * Ask['vol'] 
         Bid['value'] = Bid['price'] * Bid['vol']
-
-        #Trade Signs estimation
-        trades.reset_index(drop=True, inplace=True)
-        Ask.reset_index(drop=True, inplace=True)
-        Bid.reset_index(drop=True, inplace=True)
-
-        trsigns_start_time = time.time()
-        analyzer = TradeAnalyzer(trades, Ask, Bid)
-        tradessigns = analyzer.classify_trades()
-        trsigns_end_time = time.time()
-        trsigns_time = trsigns_end_time - trsigns_start_time
-
-        #sort dataframes and rename columns after trade signing
-        Ask.sort_values(by="datetime", inplace=True)
-        Bid.sort_values(by="datetime", inplace=True)
-        Midpoint.sort_values(by="time", inplace=True)
-        Ask.drop(columns=["time"], inplace=True)
-        Ask.rename(columns={"datetime": "time"}, inplace=True)
-        Bid.drop(columns=["time"], inplace=True)
-        Bid.rename(columns={"datetime": "time"}, inplace=True)
-
-        tradessigns.sort_values(by='datetime', inplace=True)
-        tradessigns.rename(columns={"time": "time_float"}, inplace=True)
-        tradessigns.rename(columns={"datetime": "time"}, inplace=True)
-
-        #Now that trades are matched with a quote pair, apply cleaning step T4:
-        tradessigns['spread'] = tradessigns['ask'] - tradessigns['bid']
-        tradessigns['upper_bound'] = tradessigns['ask'] + tradessigns['spread']
-        tradessigns['lower_bound'] = tradessigns['bid'] - tradessigns['spread']
-        tradessigns = tradessigns[
-            (tradessigns['price'] <= tradessigns['upper_bound']) &
-            (tradessigns['price'] >= tradessigns['lower_bound'])
-        ]
-        tradessigns = tradessigns.drop(columns=['upper_bound', 'lower_bound'])
-        
-        if tradessigns.empty:
-            raise NoTradesException()
-        
-        tradessigns.sort_values(by='time', inplace=True)
-
-        #Set trades to be the extended result of the trade signing, including the Initiator column
-        trades = tradessigns
 
         #Define trade specific dataframes
         specific_df_start_time = time.time()
@@ -651,7 +671,7 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day,
                 f.write(f"Load time: {load_time} seconds\n")
                 f.write(f"decode time: {decode_end_time - decode_start_time} seconds\n")
                 f.write(f"format time: {format_end_time - format_start_time} seconds\n")
-                f.write(f"Clean time: {clean_only_end_time - clean_only_start_time} seconds\n")
+                f.write(f"Clean time: {clean_end_time - clean_start_time - trsigns_time} seconds\n")
                 f.write(f"specific trades time: {specific_df_end_time - specific_df_start_time} seconds\n")
                 f.write(f"returns time: {returns_end_time - returns_start_time} seconds\n")
                 f.write(f"TradeSigns time: {trsigns_time} seconds\n")

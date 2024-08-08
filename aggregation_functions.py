@@ -1,15 +1,8 @@
 # aggregation_functions.py
 import pandas as pd
 import numpy as np
-import argparse
-import cProfile
-import pstats
-import time
 import polars as pl
-from typing import List
-from datetime import timedelta
-from datetime import datetime
-from statsmodels.tsa.stattools import acf
+from numba import njit
 
 #Separate opening and closing prices from the variable calculation, will be saved in daily auction group
 def auction_conditions(pl_df):
@@ -39,6 +32,7 @@ def reindex_to_seconds(df, base_date):
     return df_reindexed
 
 #Calculate the variance
+
 def calculate_minute_variance(returns):
     x = returns.to_numpy()
     x = x[~np.isnan(x)]
@@ -48,6 +42,7 @@ def calculate_minute_variance(returns):
     return x.var()
 
 #Calculate the volatility
+
 def calculate_minute_volatility(series):
     x = series.to_numpy()
     x = x[~np.isnan(x)]
@@ -68,6 +63,7 @@ def calculate_autocorrelation_v1(series, lag=1):
 
 
 #Calculate the non-partial autocorrelation
+
 def calculate_autocorrelation_v2(series, lag=1):
     x = series.to_numpy()
     x = x[~np.isnan(x)]
@@ -137,11 +133,6 @@ def apply_oib_aggregations(df):
             function=lambda groups: calculate_minute_volatility(groups[0]),
             return_dtype=pl.Float64
         ).alias('OIB_SHR_volatility_s'),
-        pl.map_groups(
-            exprs=["OIB_SHR"],
-            function=lambda groups: calculate_autocorrelation_v1(groups[0], lag=5),
-            return_dtype=pl.Float64
-        ).alias('OIB_SHR_autocorr5_s'),
         pl.map_groups(
             exprs=["OIB_SHR"],
             function=lambda groups: calculate_autocorrelation_v1(groups[0]),
