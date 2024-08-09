@@ -71,7 +71,7 @@ emptyVariablesName="empty_bars.txt"
 getsuffixName="get_suffix.py"
 # Determine the base path and other paths based on the path_type argument
 if [ "$machine" == "REG" ]; then
-    hdf5OriginalFilePath="/mnt/e/repository/data/taq/processed/raw_hdf5/"
+    hdf5OriginalFilePath="/mnt/e/repository/data/taq/processed/test_hdf5/"
     hdf5VariableFilePath="$current_dir/"
     pythonScriptPath="$current_dir/"
     excludeStocksFilePath="$current_dir/"

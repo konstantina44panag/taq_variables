@@ -9,14 +9,8 @@ import pstats
 import argparse
 import time
 import polars as pl
-from datetime import timedelta
-from datetime import datetime
-from statsmodels.tsa.stattools import acf
-from preparation import prepare_datasets, NoTradesException, NoNbbosException
+from preparation import prepare_datasets
 from aggregation_functions import auction_conditions, reindex_to_full_time, flatten_dict, calculate_oib_metrics, apply_oib_aggregations, apply_return_aggregations,apply_ret_variances_aggregations, apply_aggregations, apply_quote_aggregations, apply_midpoint_aggregations, process_resample_data, process_daily, calculate_Herfindahl
-
-class NoTradesException(Exception):
-    pass
 
 # Parse arguments
 parser = argparse.ArgumentParser(
@@ -91,19 +85,11 @@ def main():
             args.var_analysis_path,
             args.prof_analysis_path)
 
-        if result is None:
-            print(f"Dataframes return as None from preparation for {args.stock_name} on {args.base_date}.")
-            
-
-        trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Buys_Retail_trades, Sells_Retail_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result
-
-    except NoTradesException:
-        print(f"No trades to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
-        return
-    except NoNbbosException:
-        print(f"No NBBOs to process for {args.stock_name} on {args.base_date}. Skipping further calculations.")
-        return
-    
+        if result is not None:
+            trades, Buys_trades, Sells_trades, Ask, Bid, Retail_trades, Oddlot_trades, Buys_Oddlot_trades, Sells_Oddlot_trades, Buys_Retail_trades, Sells_Retail_trades, Midpoint, trade_returns, midprice_returns, trade_signs, nbbo_signs = result
+        else:
+            print(f"No nbbos or trades for {args.stock_name} on {args.base_date}.")
+            return
     except Exception as e:
         print(f"An error occurred while preparing datasets: {e}")
         raise
@@ -112,8 +98,8 @@ def main():
     main_start_time = time.time()
    
     #Process daily bars
-    exchanges_set = list('ABCDIJKMNPSTQVWXYZ')
-    conditions_set = [''] + list('@ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890')
+    exchanges_set = list('ABCDHIJKLMNPSTQUVWXYZ1')    #DAILY TAQ MANUALS: 2024, 2022, 2020, 2016, 2013,  2006
+    conditions_set = [''] + ['nan'] + list('@ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890')   #DAILY TAQ MANUALS: 2024, 2022, 2020, 2016, 2013,  2006
     if 'time' in trades.columns:
             trades.set_index('time', inplace=True)
     df_filtered_inside  = trades.between_time("09:30", "15:59:59").copy()
@@ -144,7 +130,7 @@ def main():
     #Check for empty dataframe after the cleaning step
     if pl_trades.height == 0:
         print(f"No trades after cleaning techniques for {args.stock_name}")
-        raise NoTradesException()
+        return
     
     #Processing open /close auction prices
     start_auction_time = time.time()

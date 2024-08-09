@@ -462,6 +462,8 @@ def process_daily(df_filtered_inside, df_filtered_outside, set, column, is_cond=
         for char in set:
             if char == '@':
                 key = 'cond_at' if is_cond else 'ex_at'
+            elif char == 'nan':
+                key = 'cond_nan' if is_cond else 'ex_nan'    
             elif char == '':
                 key = 'cond_empty' if is_cond else 'ex_empty'
             else:
@@ -469,6 +471,8 @@ def process_daily(df_filtered_inside, df_filtered_outside, set, column, is_cond=
 
             if char == '' and is_cond:
                 df_filtered = df_interval.filter(pl.col(column) == '')
+            elif char == 'nan' and is_cond:
+                df_filtered = df_interval.filter(pl.col(column) == "nan")     
             else:
                 df_filtered = df_interval.filter(pl.col(column).str.contains(char))
 

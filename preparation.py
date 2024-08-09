@@ -63,7 +63,7 @@ def load_trades_dataset(
         return df
 
     except tables.NoSuchNodeError as e:
-        raise ValueError(f"Dataset path not found: {dataset_path}")
+        return None
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
         
@@ -101,7 +101,7 @@ def load_quotes_dataset(
         return df
 
     except tables.NoSuchNodeError as e:
-        raise ValueError(f"Dataset path not found: {dataset_path}")
+        return None
     except Exception as e:
         raise Exception(f"An error occurred: {e}")
         
@@ -247,6 +247,9 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day,
                 suf_pattern="SUF",
                 cond_pattern="COND",
             )
+            if trades is None:
+                raise NoTradesException()
+            
             nbbos = load_quotes_dataset(
                 hdf,
                 complete_nbbo_dataset_path,
@@ -261,6 +264,8 @@ def prepare_datasets(hdf5_file_path, base_date, stock_name, s, year, month, day,
                 suf_pattern="SUF",
                 exclude_pattern="NBBO",
             )
+            if nbbos is None:
+                raise NoNbbosException()
 
         load_end_time = time.time()
         load_time = load_end_time - load_start_time
