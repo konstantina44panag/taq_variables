@@ -1,20 +1,28 @@
 #!/bin/bash
 # This script sets paths and arguments to execute a python script for multiple stocks and days
-#Syntax:
-#The syntax for a not HPC machine is:  ./script.sh REG 2014 03 -- 02 -- IBM
-#The syntax for HPC is:  ./script.sh HPC 2014 03 -- 02 -- IBM 
-#The syntax for one day is:  ./script.sh REG 2014 03 -- 02 -- IBM
-#The syntax for one stock is: ./script.sh REG 2014 03 -- 02 -- IBM MSFT
-# The syntax for some days is : ./script.sh REG 2014 03 -- 02 03 -- IBM
-#The syntax for some stocks is : ./script.sh REG 2014 03 -- 02 03 -- IBM A AA ABC MSFT
-#The syntax for all trading days for every stock is : ./script.sh REG 2014 03 -- all -- IBM A AA ABC MSFT
-#The first three arguments are always the machine year month, these can change as well
+# Syntax:
+# The syntax for a regular (non-HPC) machine is:  ./script.sh REG 2014 03 -- 02 -- IBM
+# The syntax for an HPC machine is:  ./script.sh HPC 2014 03 -- 02 -- IBM 
+# The syntax for processing one day for one or more stocks is:  ./script.sh REG 2014 03 -- 02 -- IBM MSFT
+# The syntax for processing multiple specific days for one or more stocks is: ./script.sh REG 2014 03 -- 02 03 -- IBM MSFT
+# The syntax for processing all trading days for a specific set of stocks is: ./script.sh REG 2014 03 -- all -- IBM MSFT
+# The syntax for processing all trading days for all stocks is: ./script.sh REG 2014 03 -- all -- all
+# The syntax for processing all trading days for the first half of available stocks is: ./script.sh HPC 2014 03 -- all -- half
+# The syntax for processing all trading days for the second half of available stocks is: ./script.sh HPC 2014 03 -- all -- other_half
+# The syntax for processing specific days for the first half of available stocks is: ./script.sh HPC 2014 03 -- 02 -- half
+# The syntax for processing specific days for the second half of available stocks is: ./script.sh HPC 2014 03 -- 02 -- other_half
+# The first three arguments are always the machine type (REG or HPC), year, and month, and these can change as needed.
 #
-#Modify the directories in lines:
-#Line 56, provides the appropriate path for reading the HDF5. The path filled is the appropriate on ATOM for reading a small copy of hdf5. 
-#For the original hdf5 the folder "test_hdf5" should be changed to "raw_hdf5"
-#Lines 57-65, the paths of the remaining files are set to the current directory where the program runs
-#Lines 56 -65 can change directories
+# Modify the directories in the following lines:
+# Line 74: Specifies the appropriate path for reading the HDF5 files. The default path is set for a test HDF5 file on ATOM. 
+#          For original HDF5 files, change the folder "test_hdf5" to "raw_hdf5".
+# Lines 75-83: Set the paths for the remaining files. These paths are set to the current directory where the program runs.
+#              These paths may need to be changed based on the execution environment.
+#
+# The script handles different stock selection modes:
+# - "all": Processes all available stocks.
+# - "half": Processes the first half of the available stocks.
+# - "other_half": Processes the second half of the available stocks.
 set -eu
 export RUST_BACKTRACE=full
 
@@ -47,15 +55,7 @@ while [[ $# -gt 0 && "$1" != '--' ]]; do
     shift
 done
 
-# Skip over the third '--' delimiter if it exists
-if [[ $# -gt 0 ]]; then
-    shift
-fi
 
-# If there is one more argument, it is the specific stock
-if [[ $# -gt 0 ]]; then
-    specific_stock="$1"
-fi
 
 # Get the current directory
 current_dir=$(pwd)
@@ -120,25 +120,31 @@ if [ -f "$hdf5OriginalFile" ]; then
         h5ls -r $hdf5OriginalFile > "$hdf5ContentsFile"
     fi
 
-    # Find all trading stocks from the contents
+    #Find all orfirst half or second half of available stocks either for one day or for all
     IFS=$'\n'
-    if [ ${#days[@]} -eq 1 ] && [ "${days[0]}" != "all" ]; then
-        day=${days[0]}
-        available_stocks=($(grep "/day${day}/ctm/table" "$hdf5ContentsFile"| sed -E "s|/([^/]+)/day${day}/ctm/table.*|\\1|" | sort | uniq))
-        if [[ -n "$specific_stock" ]]; then
-            available_stocks=($(printf "%s\n" "${available_stocks[@]}" | awk -v stock="$specific_stock" 'BEGIN {found=0} {if ($0 >= stock) found=1} found')) #or >
+    if [[ "${stocks[0]}" == "all" || "${stocks[0]}" == "half" || "${stocks[0]}" == "other_half" ]]; then
+        if [[ ${#days[@]} -eq 1 && "${days[0]}" != "all" ]]; then
+            day=${days[0]}
+            available_stocks=($(grep "/day${day}/ctm/table" "$hdf5ContentsFile" | sed -E "s|/([^/]+)/day${day}/ctm/table.*|\\1|" | sort | uniq))
+        else
+            available_stocks=($(grep '/day[0-9][0-9]/ctm/table' "$hdf5ContentsFile" | sed -E 's|/([^/]+)/day[0-9][0-9]/ctm/table.*|\1|' | sort | uniq))
         fi
-    else
-        available_stocks=($(grep '/day[0-9][0-9]/ctm/table' "$hdf5ContentsFile" | sed -E 's|/([^/]+)/day[0-9][0-9]/ctm/table.*|\1|' | sort | uniq))
+        
+        half_index=$(((${#available_stocks[@]} + 1) / 2))
+        case "${stocks[0]}" in
+            "half")
+                stocks=("${available_stocks[@]:0:$half_index}")
+                ;;
+            "other_half")
+                stocks=("${available_stocks[@]:$half_index}")
+                ;;
+            "all")
+                stocks=("${available_stocks[@]}")
+                ;;
+        esac
     fi
     unset IFS
-
-    # Create a list of invalid stocks
-    if [ "${stocks[0]}" == "all" ]; then
-        stocks=("${available_stocks[@]}")
-    fi
-
-    #For every stock argument:
+    #For every stock in desired stocks:
     for stock in "${stocks[@]}"; do
         #Exclude stocks, google doc Taq Cleaning Techniques, page 3
         if [[ " ${exclude_stocks[@]} " =~ " ${stock} " ]]; then
@@ -146,7 +152,7 @@ if [ -f "$hdf5OriginalFile" ]; then
             continue
         fi
 
-        #If the argument is to execute all days, then  all days will be the list of the loop, otherwise the list of loop is the list of day arguments
+        #If the argument is to execute all days,then find all trading days for some stock
         if [ "${days[0]}" == "all" ]; then
             IFS=$'\n'
             available_days=($(grep "/${stock}/day[0-9][0-9]/ctm/table" "$hdf5ContentsFile" | sed -E 's|.*/day([0-9][0-9])/ctm/table.*|\1|' | sort | uniq))
@@ -158,7 +164,7 @@ if [ -f "$hdf5OriginalFile" ]; then
             days=("${available_days[@]}")
         fi
 
-        #For every day in the list of days:
+        #For every day in the list of desired days:
         for day in "${days[@]}"; do
             #In case the list of the loop is a list from the arguments, then check that each day exists in the available days when the stock traded
             #The variable file name should be defined here, because it depends on the day

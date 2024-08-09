@@ -438,7 +438,7 @@ def main():
         write_end_time = time.time()
 
     #Write the time analysis to a text file
-    if args.var_analysis_path is not None and args.stock_name == "IBM":
+    if args.var_analysis_path is not None and args.stock_name == "IBM" and args.day=="03":
         with open(args.var_analysis_path, "a") as f:
             f.write(f"Stock: {args.stock_name}\n")
             f.write(f"\nSuffix: {args.s}\n")

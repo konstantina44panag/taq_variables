@@ -26,11 +26,6 @@ def reindex_to_full_time(df, base_date, outside_trading=False):
     df_reindexed = df.reindex(full_time_index)
     return df_reindexed
 
-def reindex_to_seconds(df, base_date):
-    full_time_index = pd.date_range(start=f"{base_date} 09:30", end=f"{base_date} 15:59", freq="1s")
-    df_reindexed = df.reindex(full_time_index).fillna(0)
-    return df_reindexed
-
 #Calculate the variance
 
 def calculate_minute_variance(returns):
@@ -39,7 +34,7 @@ def calculate_minute_variance(returns):
     n = len(x)
     if n <= 1:
         return np.nan
-    return x.var()
+    return np.var(x)
 
 #Calculate the volatility
 
@@ -49,7 +44,7 @@ def calculate_minute_volatility(series):
     n = len(x)
     if n <= 1:
         return np.nan
-    return x.std()
+    return np.std(x, ddof=0)
 
 #Calculate the partial autocorrelation
 def calculate_autocorrelation_v1(series, lag=1):
@@ -57,13 +52,13 @@ def calculate_autocorrelation_v1(series, lag=1):
     x = x[~np.isnan(x)]
     if len(x) <= lag:
         return np.nan
-    if np.var(x) == 0 or np.var(x[:-lag]) == 0 or np.var(x[lag:]) == 0:
+    x_lagged = x[:-lag]
+    x_current = x[lag:]
+    if np.var(x_lagged) == 0 or np.var(x_current) == 0:
         return np.nan
-    return np.corrcoef(x[:-lag], x[lag:])[0, 1]
-
+    return np.corrcoef(x_lagged, x_current)[0, 1]
 
 #Calculate the non-partial autocorrelation
-
 def calculate_autocorrelation_v2(series, lag=1):
     x = series.to_numpy()
     x = x[~np.isnan(x)]
@@ -79,7 +74,6 @@ def calculate_autocorrelation_v2(series, lag=1):
 
 
 #Calculate the orderflow by Chordia, Hu, Subrahmanyam and Tong, MS 2019
-
 def calculate_oib_metrics(df1_filtered, df2_filtered, base_date):
     if df1_filtered is None or df1_filtered.empty or df1_filtered.isna().all().all() or df2_filtered is None or df2_filtered.empty or df2_filtered.isna().all().all():
         return None
@@ -92,69 +86,69 @@ def calculate_oib_metrics(df1_filtered, df2_filtered, base_date):
 
     aggregations = [
         pl.col('vol').sum().alias('shr'),
-        pl.col('vol').count().alias('num'),
+        pl.col('vol').count().cast(pl.Int64).alias('num'),
         pl.col('value').sum().alias('doll'),
     ]
     
     buys_per_s = df1_pl.group_by_dynamic('time', every='1s', closed='left', label='left').agg(aggregations)
     sells_per_s = df2_pl.group_by_dynamic('time', every='1s', closed='left', label='left').agg(aggregations)
 
-    buys_per_s = buys_per_s.to_pandas().set_index("time")
-    sells_per_s = sells_per_s.to_pandas().set_index("time")
-    buys_per_s = reindex_to_seconds(buys_per_s, base_date)
-    sells_per_s = reindex_to_seconds(sells_per_s, base_date)
+    missing_times = sells_per_s.select(pl.col('time')).filter(~pl.col('time').is_in(buys_per_s['time']))
+    fill_data = missing_times.with_columns([
+        pl.lit(0, dtype=pl.Float64).alias('shr'),
+        pl.lit(0, dtype=pl.Int64).alias('num'),
+        pl.lit(0, dtype=pl.Float64).alias('doll')
+    ])
+    buys_per_s = buys_per_s.vstack(fill_data).sort('time')
+    joined = buys_per_s.join(sells_per_s, on='time', how='left', suffix="_sells")
+    joined = joined.fill_null(0)
+    joined = joined.sort('time')
 
-    oib_shr_s = (buys_per_s['shr'] - sells_per_s['shr']) / (buys_per_s['shr'] + sells_per_s['shr'])
-    oib_num_s = (buys_per_s['num'] - sells_per_s['num']) / (buys_per_s['num'] + sells_per_s['num'])
-    oib_doll_s = (buys_per_s['doll'] - sells_per_s['doll']) / (buys_per_s['doll'] + sells_per_s['doll'])
-    
-    oib_metrics = pd.DataFrame({
-        'OIB_SHR': oib_shr_s,
-        'OIB_NUM': oib_num_s,
-        'OIB_DOLL': oib_doll_s
-    })
-    oib_metrics.dropna(inplace=True)
-    oib_metrics.reset_index(inplace = True)
-    oib_metrics.rename(columns={'index': 'time'}, inplace=True)
-    return oib_metrics
+    oib_shr_s = (joined['shr'] - joined['shr_sells']) / (joined['shr'] + joined['shr_sells'])
+    oib_num_s = (joined['num'] - joined['num_sells']) / (joined['num'] + joined['num_sells'])
+    oib_doll_s = (joined['doll'] - joined['doll_sells']) / (joined['doll'] + joined['doll_sells'])
+    joined = joined.with_columns([
+        oib_shr_s.alias('oib_shr_s'),
+        oib_num_s.alias('oib_num_s'),
+        oib_doll_s.alias('oib_doll_s')
+    ])
+
+    joined = joined.select(['time', 'oib_shr_s', 'oib_num_s', 'oib_doll_s'])
+    return joined
 
 #Calculate the variance and autocorrelation of orderflow by Chordia, Hu, Subrahmanyam and Tong, MS 2019
-def apply_oib_aggregations(df):
-    if df is None or df.empty or df.isna().all().all():
-        return None
-    
-    pl_df = pl.from_pandas(df)
+def apply_oib_aggregations(pl_df):
     if pl_df.height == 0 or pl_df.height == 1:
         return None
 
     resampled_df = pl_df.group_by_dynamic('time', every='1m', closed='left', label='left').agg([
         pl.map_groups(
-            exprs=["OIB_SHR"],
+            exprs=["oib_shr_s"],
             function=lambda groups: calculate_minute_volatility(groups[0]),
             return_dtype=pl.Float64
         ).alias('OIB_SHR_volatility_s'),
         pl.map_groups(
-            exprs=["OIB_SHR"],
+            exprs=["oib_shr_s"],
             function=lambda groups: calculate_autocorrelation_v1(groups[0]),
             return_dtype=pl.Float64
         ).alias('OIB_SHR_autocorr_s'),
         pl.map_groups(
-            exprs=["OIB_NUM"],
+            exprs=["oib_num_s"],
             function=lambda groups: calculate_minute_volatility(groups[0]),
             return_dtype=pl.Float64
         ).alias('OIB_NUM_volatility_s'),
         pl.map_groups(
-            exprs=["OIB_NUM"],
+            exprs=["oib_num_s"],
             function=lambda groups: calculate_autocorrelation_v1(groups[0]),
             return_dtype=pl.Float64
         ).alias('OIB_NUM_autocorr_s'),
         pl.map_groups(
-            exprs=["OIB_DOLL"],
+            exprs=["oib_doll_s"],
             function=lambda groups: calculate_minute_volatility(groups[0]),
             return_dtype=pl.Float64
         ).alias('OIB_DOLL_volatility_s'),
         pl.map_groups(
-            exprs=["OIB_DOLL"],
+            exprs=["oib_doll_s"],
             function=lambda groups: calculate_autocorrelation_v1(groups[0]),
             return_dtype=pl.Float64
         ).alias('OIB_DOLL_autocorr_s')
@@ -232,7 +226,7 @@ def apply_aggregations(df_filtered, df_name, outside_trading=False):
     try:
         #Group the dataframe to 1-second intervals and count the events inside
         seconds_df = pl_df.group_by_dynamic('time', every=interval_seconds, closed='left', label='left').agg([
-            pl.col('price').count().alias('count')
+            pl.col('price').count().cast(pl.Int64).alias('count')
         ])
 
         #Compute the variable: maximum events in the seconds per minute
@@ -259,7 +253,7 @@ def apply_aggregations(df_filtered, df_name, outside_trading=False):
             pl.col('value').sum().alias('tot_value'),
             calculate_vwap_pl().alias('vwap'),
             calculate_twap_pl().alias('twap'),
-            pl.col('price').count().alias('num_events')
+            pl.col('price').count().cast(pl.Int64).alias('num_events')
         ]
         if df_name in ['Buys_trades', 'Buys_Oddlot_trades', 'Buys_Retail_trades']:
             aggregations.append(pl.col('pNextSell_tob').mean().alias('pNextSell_avg'))
@@ -304,7 +298,7 @@ def apply_quote_aggregations(df_filtered, df_name, outside_trading=False):
     try:
         #Group the dataframe to 1-second intervals and count the events inside
         seconds_df = pl_df.group_by_dynamic('time', every=interval_seconds, closed='left', label='left').agg([
-            pl.col('price').count().alias('count')
+            pl.col('price').count().cast(pl.Int64).alias('count')
         ])
 
         #Compute the variable: maximum events in the seconds per minute
@@ -337,12 +331,11 @@ def apply_quote_aggregations(df_filtered, df_name, outside_trading=False):
             pl.col('value').sum().alias('tot_value'),
             calculate_vwap_pl().alias('vwap'),
             calculate_twap_pl().alias('twap'),
-            pl.col('price').count().alias('num_events'),
+            pl.col('price').count().cast(pl.Int64).alias('num_events'),
             encode_conditions_expr().alias('halt_indic')
         ]
 
         resampled_df = pl_df.group_by_dynamic('time', every=interval_minutes, closed='left', label='left').agg(aggregations)
-
         resampled_df = resampled_df.to_pandas()
         max_trades = max_trades.to_pandas()
         #Merge with the aggregation of maximum number of trades which was performed prior to the others
@@ -371,7 +364,7 @@ def apply_midpoint_aggregations(df_filtered, outside_trading=False):
     try:
         #Group the dataframe to 1-second intervals and count the events inside
         seconds_df = pl_df.group_by_dynamic('time', every=interval_seconds, closed='left', label='left').agg([
-            pl.col('price').count().alias('count')
+            pl.col('price').count().cast(pl.Int64).alias('count')
         ])
 
         #Compute the variable: maximum events in the seconds per minute
@@ -381,7 +374,7 @@ def apply_midpoint_aggregations(df_filtered, outside_trading=False):
 
         #Count the number of events
         aggregations = [
-            pl.col('price').count().alias('num_events')
+            pl.col('price').count().cast(pl.Int64).alias('num_events')
         ]
 
         resampled_df = pl_df.group_by_dynamic('time', every=interval_minutes, closed='left', label='left').agg(aggregations)
@@ -531,7 +524,7 @@ def calculate_Herfindahl(df):
         return None
     
     pl_df = pl.from_pandas(df_filtered.reset_index())
-    
+
     resampled = pl_df.group_by_dynamic('time', every='1s', closed='left', label='left').agg([
         pl.col('value').sum().alias('sum'),
         (pl.col('value')**2).sum().alias('sum_of_squared')
